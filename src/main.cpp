@@ -50,15 +50,16 @@ DWORD GetIniFilePath(DWORD size, wchar_t* buffer)
         size_t dir_len = (size_t)(last_slash - buffer) + 1;
         if (dir_len < size) {
             buffer[dir_len] = L'\0';
-            wcsncat(buffer, IniFileName, wcslen(IniFileName));
-            return length+dir_len;
+            wcsncat_s(buffer, size, IniFileName, wcslen(IniFileName));
+            return static_cast<DWORD>(length+dir_len);
         }
     } else {
-        length = wcslen(IniFileName);
-        wcsncpy(buffer, IniFileName, length);
+        length = static_cast<DWORD>(wcslen(IniFileName));
+        wcsncpy_s(buffer, size, IniFileName, length);
         buffer[length] = L'\0';
         return length;
     }
+    return 0;
 }
 
 void FormatBytes(DWORD size, wchar_t* buffer, ULONGLONG bytes)
@@ -66,7 +67,7 @@ void FormatBytes(DWORD size, wchar_t* buffer, ULONGLONG bytes)
     swprintf_s(buffer, size, L"%.1f GB", (float)bytes / Giga);
 }
 
-void FormatNetworkSpeed(DWORD size, wchar_t* buffer, float bps)
+void FormatNetworkSpeed(DWORD size, wchar_t* buffer, double bps)
 {
     if(bps >= Giga)
         swprintf_s(buffer, size, L"%.2f GB/s", bps / Giga);
@@ -103,7 +104,7 @@ void DrawCard(HDC hdc, const RECT& rect, COLORREF accentColor)
     DeleteObject(hbrAccent);
 }
 
-void DrawProgressBar(HDC hdc, const RECT& rect, float percentage, COLORREF color)
+void DrawProgressBar(HDC hdc, const RECT& rect, double percentage, COLORREF color)
 {
     // 1. Draw progress bar background slot
     HBRUSH hbrSlot = CreateSolidBrush(RGB(40, 40, 46));
@@ -112,7 +113,7 @@ void DrawProgressBar(HDC hdc, const RECT& rect, float percentage, COLORREF color
 
     // 2. Calculate and draw filled bar bounds
     int32_t totalWidth = rect.right - rect.left;
-    int32_t fillWidth = (int32_t)(totalWidth * (percentage / 100.0f));
+    int32_t fillWidth = (int32_t)(totalWidth * (percentage / 100.0));
     fillWidth = std::clamp(fillWidth, 0, totalWidth);
 
     if(fillWidth > 0) {
@@ -155,7 +156,7 @@ void LoadSettings(size_t length, const wchar_t* iniPath)
     g_settings.alwaysOnTop = GetPrivateProfileIntW(SettingsName, L"AlwaysOnTop", 0, iniPath) != 0;
 }
 
-void SaveSettings(size_t length, const wchar_t* iniPath)
+void SaveSettings(const wchar_t* iniPath)
 {
     wchar_t intervalStr[16];
     swprintf_s(intervalStr, L"%d", g_settings.updateIntervalMs);
@@ -258,8 +259,8 @@ LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPa
                 g_settings.updateIntervalMs = newInterval;
             g_settings.alwaysOnTop = SendDlgItemMessageW(hwnd, kDlgAlwaysOnTopChk, BM_GETCHECK, 0, 0) == BST_CHECKED;
 
-            DWORD length = GetIniFilePath(ResourceMonitor::kBufferWChars, g_monitor.GetTextBuffer());
-            SaveSettings(length, g_monitor.GetTextBuffer());
+            GetIniFilePath(ResourceMonitor::kBufferWChars, g_monitor.GetTextBuffer());
+            SaveSettings(g_monitor.GetTextBuffer());
 
             HWND hwndMain = GetParent(hwnd);
             if(hwndMain) {
@@ -381,7 +382,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     LoadSettings(length, g_monitor.GetTextBuffer());
 
     int32_t width = 260;
-    int32_t height = 150 + CountGpuAdapters() * 30;
+    int32_t height = 164 + CountGpuAdapters() * 44;
 
     int32_t x = (int32_t)GetPrivateProfileIntW(L"Window", L"x", CW_USEDEFAULT, g_monitor.GetTextBuffer());
     int32_t y = (int32_t)GetPrivateProfileIntW(L"Window", L"y", CW_USEDEFAULT, g_monitor.GetTextBuffer());
@@ -427,6 +428,7 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
     switch(uMsg) {
     case WM_CREATE: {
+        SetPriorityClass(GetCurrentProcess(), PROCESS_MODE_BACKGROUND_BEGIN);
         // High precision standard 1-second system timer
         SetTimer(hwnd, 1, g_settings.updateIntervalMs, nullptr);
         return 0;
@@ -604,11 +606,13 @@ LRESULT OnPaintMain(HWND hwnd, ResourceMonitor& monitor)
     int32_t cy = 30;
 
     // Fetch all metrics up front
-    const double memUsage    = monitor.GetMemoryUsagePercent();
+    const DWORD     memUsagePct = monitor.GetMemoryUsagePercent();
+    const DWORDLONG memUsage    = monitor.GetMemoryUsage();
+    const DWORDLONG memAvail    = monitor.GetMemoryAvailable();
     const double cpuUsage    = monitor.GetCpuUsage();
     const auto   diskMetrics = monitor.GetDiskMetrics();
     const auto   netMetrics  = monitor.GetNetworkMetrics();
-    const auto&  gpuList     = monitor.GetGpuMetrics();
+    const auto  gpuList     = monitor.GetGpuMetrics();
 
     static const COLORREF kColorRam  = RGB(155, 93,  229);
     static const COLORREF kColorCpu  = RGB(0,   242, 254);
@@ -618,7 +622,8 @@ LRESULT OnPaintMain(HWND hwnd, ResourceMonitor& monitor)
 
     // ---- 1. Memory (RAM) ----
     {
-        RECT rCard = {12, cy, 12 + cardWidth, cy + cardH};
+        const int32_t ramCardH = cardH + 14;
+        RECT rCard = {12, cy, 12 + cardWidth, cy + ramCardH};
         DrawCard(hdcMem, rCard, kColorRam);
         SelectObject(hdcMem, hFontSection);
         SetTextColor(hdcMem, kColorRam);
@@ -627,12 +632,19 @@ LRESULT OnPaintMain(HWND hwnd, ResourceMonitor& monitor)
         SelectObject(hdcMem, hFontDetail);
         SetTextColor(hdcMem, RGB(255, 255, 255));
         wchar_t s[32];
-        swprintf_s(s, L"%.1f%%", memUsage);
+        swprintf_s(s, L"%lu%%", memUsagePct);
         RECT rV = {60, cy + 6, 110, cy + 20};
         DrawTextW(hdcMem, s, -1, &rV, DT_LEFT | DT_TOP | DT_SINGLELINE);
         RECT rP = {115, cy + 9, w - 20, cy + 17};
-        DrawProgressBar(hdcMem, rP, memUsage, kColorRam);
-        cy += cardStep;
+        DrawProgressBar(hdcMem, rP, (float)memUsagePct, kColorRam);
+        wchar_t usedStr[16], availStr[16];
+        FormatBytes(16, usedStr, memUsage);
+        FormatBytes(16, availStr, memAvail);
+        swprintf_s(g_monitor.GetTextBuffer(), ResourceMonitor::kBufferWChars, L"used %s  avail %s", usedStr, availStr);
+        SetTextColor(hdcMem, RGB(160, 160, 170));
+        RECT rDetail = {24, cy + 20, w - 20, cy + ramCardH - 4};
+        DrawTextW(hdcMem, g_monitor.GetTextBuffer(), -1, &rDetail, DT_LEFT | DT_TOP | DT_SINGLELINE);
+        cy += ramCardH + 4;
     }
 
     // ---- 2. CPU ----
@@ -657,7 +669,8 @@ LRESULT OnPaintMain(HWND hwnd, ResourceMonitor& monitor)
     // ---- 3. GPU (one card per adapter) ----
     for (size_t gi = 0; gi < gpuList.size(); ++gi) {
         const auto& gm = gpuList[gi];
-        RECT rCard = {12, cy, 12 + cardWidth, cy + cardH};
+        const int32_t gpuCardH = cardH + 14;
+        RECT rCard = {12, cy, 12 + cardWidth, cy + gpuCardH};
         DrawCard(hdcMem, rCard, kColorGpu);
         SelectObject(hdcMem, hFontSection);
         SetTextColor(hdcMem, kColorGpu);
@@ -673,7 +686,13 @@ LRESULT OnPaintMain(HWND hwnd, ResourceMonitor& monitor)
         DrawTextW(hdcMem, s, -1, &rV, DT_LEFT | DT_TOP | DT_SINGLELINE);
         RECT rP = {115, cy + 9, w - 20, cy + 17};
         DrawProgressBar(hdcMem, rP, gm.loadPercent, kColorGpu);
-        cy += cardStep;
+        wchar_t vramUsedStr[16];
+        FormatBytes(16, vramUsedStr, (ULONGLONG)gm.vramUsedBytes);
+        swprintf_s(g_monitor.GetTextBuffer(), ResourceMonitor::kBufferWChars, L"used %s", vramUsedStr);
+        SetTextColor(hdcMem, RGB(160, 160, 170));
+        RECT rDetail = {24, cy + 20, w - 20, cy + gpuCardH - 4};
+        DrawTextW(hdcMem, g_monitor.GetTextBuffer(), -1, &rDetail, DT_LEFT | DT_TOP | DT_SINGLELINE);
+        cy += gpuCardH + 4;
     }
 
     // ---- 4. Disk I/O ----

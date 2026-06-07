@@ -15,10 +15,12 @@ static constexpr DWORD kMaxIf      = 32;
 static constexpr DWORD kMaxGpu     = 8;
 static constexpr DWORD kPageSize   = 4096;
 
-static constexpr DWORD kSlabIfOff  = 0;
-static constexpr DWORD kSlabHndOff = kSlabIfOff  + kMaxIf  * sizeof(DWORD);
-static constexpr DWORD kSlabMetOff = kSlabHndOff + kMaxGpu * sizeof(HANDLE);
-static constexpr DWORD kSlabUsed   = kSlabMetOff + kMaxGpu * sizeof(GpuMetrics);
+static constexpr DWORD kSlabIfOff           = 0;
+static constexpr DWORD kSlabHndOff          = kSlabIfOff           + kMaxIf  * sizeof(DWORD);
+static constexpr DWORD kSlabMetOff          = kSlabHndOff          + kMaxGpu * sizeof(HANDLE);
+static constexpr DWORD kSlabHndVramUsedOff  = kSlabMetOff          + kMaxGpu * sizeof(GpuMetrics);
+static constexpr DWORD kSlabHndVramBudgetOff = kSlabHndVramUsedOff + kMaxGpu * sizeof(HANDLE);
+static constexpr DWORD kSlabUsed            = kSlabHndVramBudgetOff + kMaxGpu * sizeof(HANDLE);
 static_assert(kSlabUsed <= ResourceMonitor::kBufferSize, "slab overflows one page");
 
 // ---------------------------------------------------------------------------
@@ -43,9 +45,10 @@ void ResourceMonitor::Initialize()
 {
     // Allocate and zero the slab; partition into typed pointers
     m_slab       = VirtualAlloc(nullptr, kPageSize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
-    m_ifIndices  = reinterpret_cast<DWORD*>    (static_cast<BYTE*>(m_slab) + kSlabIfOff);
-    m_gpuCounters = reinterpret_cast<HANDLE*>   (static_cast<BYTE*>(m_slab) + kSlabHndOff);
-    m_gpuData    = reinterpret_cast<GpuMetrics*>(static_cast<BYTE*>(m_slab) + kSlabMetOff);
+    m_ifIndices             = reinterpret_cast<DWORD*>    (static_cast<BYTE*>(m_slab) + kSlabIfOff);
+    m_gpuCounters           = reinterpret_cast<HANDLE*>   (static_cast<BYTE*>(m_slab) + kSlabHndOff);
+    m_gpuData               = reinterpret_cast<GpuMetrics*>(static_cast<BYTE*>(m_slab) + kSlabMetOff);
+    m_gpuVramUsedCounters   = reinterpret_cast<HANDLE*>   (static_cast<BYTE*>(m_slab) + kSlabHndVramUsedOff);
     m_textBuffer = reinterpret_cast<wchar_t*>(static_cast<BYTE*>(m_slab) + ResourceMonitor::kBufferSize);
 
     QueryPerformanceFrequency(&m_perfFreq);
@@ -126,8 +129,11 @@ void ResourceMonitor::UpdateMemoryUsage()
 {
     MEMORYSTATUSEX ms;
     ms.dwLength = sizeof(ms);
-    if(GlobalMemoryStatusEx(&ms))
-        m_memUsagePercent = (double)ms.dwMemoryLoad;
+    if(GlobalMemoryStatusEx(&ms)){
+        m_memUsagePercent = ms.dwMemoryLoad;
+        m_memUsage = ms.ullTotalPhys - ms.ullAvailPhys;
+        m_memAvail = ms.ullAvailPhys;
+    }
 }
 
 void ResourceMonitor::InitNetwork()
@@ -235,7 +241,15 @@ void ResourceMonitor::InitGpu()
             PDH_HCOUNTER hCounter = nullptr;
             PdhAddEnglishCounterW((PDH_HQUERY)m_hGpuQuery, path, 0, &hCounter);
             m_gpuCounters[m_gpuCount] = (HANDLE)hCounter;
-            m_gpuData[m_gpuCount]     = {};
+
+            swprintf_s(path,
+                L"\\GPU Adapter Memory(*luid_0x%08X_0x%08X*)\\Dedicated Usage",
+                desc.AdapterLuid.HighPart, desc.AdapterLuid.LowPart);
+            PDH_HCOUNTER hVramUsed = nullptr;
+            PdhAddEnglishCounterW((PDH_HQUERY)m_hGpuQuery, path, 0, &hVramUsed);
+            m_gpuVramUsedCounters[m_gpuCount] = (HANDLE)hVramUsed;
+
+            m_gpuData[m_gpuCount] = {};
             ++m_gpuCount;
         }
         pAdapter->Release();
@@ -252,33 +266,66 @@ void ResourceMonitor::UpdateGpuMetrics()
     PdhCollectQueryData((PDH_HQUERY)m_hGpuQuery);
 
     for(DWORD i = 0; i < m_gpuCount; ++i) {
-        HANDLE hCounter = m_gpuCounters[i];
-        if(!hCounter) continue;
-
-        DWORD needed = 0, count = 0;
-        PdhGetFormattedCounterArrayW((PDH_HCOUNTER)hCounter,
-            PDH_FMT_DOUBLE, &needed, &count, nullptr);
-        if(needed == 0) continue;
-
-        // Grow the PDH buffer only when necessary; size is page-rounded
-        if(needed > m_gpuBufCap) {
-            if(m_gpuBuf) VirtualFree(m_gpuBuf, 0, MEM_RELEASE);
-            DWORD cap = (needed + kPageSize - 1) & ~(kPageSize - 1);
-            m_gpuBuf    = static_cast<BYTE*>(
-                VirtualAlloc(nullptr, cap, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE));
-            m_gpuBufCap = m_gpuBuf ? cap : 0;
-        }
-        if(!m_gpuBuf) continue;
-
-        auto* pItems = reinterpret_cast<PDH_FMT_COUNTERVALUE_ITEM_W*>(m_gpuBuf);
-        if(PdhGetFormattedCounterArrayW((PDH_HCOUNTER)hCounter,
-               PDH_FMT_DOUBLE, &needed, &count, pItems) == ERROR_SUCCESS) {
-            double total = 0.0;
-            for(DWORD j = 0; j < count; ++j) {
-                if(pItems[j].FmtValue.CStatus == 0)
-                    total += pItems[j].FmtValue.doubleValue;
+        // 3D load
+        {
+            HANDLE hCounter = m_gpuCounters[i];
+            if(hCounter) {
+                DWORD needed = 0, count = 0;
+                PdhGetFormattedCounterArrayW((PDH_HCOUNTER)hCounter,
+                    PDH_FMT_DOUBLE, &needed, &count, nullptr);
+                if(needed > 0) {
+                    if(needed > m_gpuBufCap) {
+                        if(m_gpuBuf) VirtualFree(m_gpuBuf, 0, MEM_RELEASE);
+                        DWORD cap = (needed + kPageSize - 1) & ~(kPageSize - 1);
+                        m_gpuBuf    = static_cast<BYTE*>(
+                            VirtualAlloc(nullptr, cap, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE));
+                        m_gpuBufCap = m_gpuBuf ? cap : 0;
+                    }
+                    if(m_gpuBuf) {
+                        auto* pItems = reinterpret_cast<PDH_FMT_COUNTERVALUE_ITEM_W*>(m_gpuBuf);
+                        if(PdhGetFormattedCounterArrayW((PDH_HCOUNTER)hCounter,
+                               PDH_FMT_DOUBLE, &needed, &count, pItems) == ERROR_SUCCESS) {
+                            double total = 0.0;
+                            for(DWORD j = 0; j < count; ++j)
+                                if(pItems[j].FmtValue.CStatus == 0)
+                                    total += pItems[j].FmtValue.doubleValue;
+                            m_gpuData[i].loadPercent = total > 100.0 ? 100.0 : total;
+                        }
+                    }
+                }
             }
-            m_gpuData[i].loadPercent = total > 100.0 ? 100.0 : total;
         }
+
+        // VRAM used: sum Dedicated Usage across all instances for this GPU
+        double vramUsed = 0.0;
+        {
+            HANDLE hCounter = m_gpuVramUsedCounters[i];
+            if(hCounter) {
+                DWORD needed = 0, count = 0;
+                PdhGetFormattedCounterArrayW((PDH_HCOUNTER)hCounter,
+                    PDH_FMT_LARGE, &needed, &count, nullptr);
+                if(needed > 0) {
+                    if(needed > m_gpuBufCap) {
+                        if(m_gpuBuf) VirtualFree(m_gpuBuf, 0, MEM_RELEASE);
+                        DWORD cap = (needed + kPageSize - 1) & ~(kPageSize - 1);
+                        m_gpuBuf    = static_cast<BYTE*>(
+                            VirtualAlloc(nullptr, cap, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE));
+                        m_gpuBufCap = m_gpuBuf ? cap : 0;
+                    }
+                    if(m_gpuBuf) {
+                        auto* pItems = reinterpret_cast<PDH_FMT_COUNTERVALUE_ITEM_W*>(m_gpuBuf);
+                        if(PdhGetFormattedCounterArrayW((PDH_HCOUNTER)hCounter,
+                               PDH_FMT_LARGE, &needed, &count, pItems) == ERROR_SUCCESS) {
+                            LONGLONG total = 0;
+                            for(DWORD j = 0; j < count; ++j)
+                                if(pItems[j].FmtValue.CStatus == 0)
+                                    total += pItems[j].FmtValue.largeValue;
+                            vramUsed = (double)total;
+                        }
+                    }
+                }
+            }
+        }
+        m_gpuData[i].vramUsedBytes = vramUsed;
     }
 }

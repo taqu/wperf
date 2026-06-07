@@ -21,7 +21,7 @@ Right-click the overlay to open Settings:
 
 | Option | Description |
 |---|---|
-| Update interval (ms) | How often metrics refresh (250 – 60 000 ms, default 1 000) |
+| Update interval (ms) | How often metrics refresh (250 – 60,000 ms, default 1,000) |
 | Always on top | Float above all windows instead of sitting behind them |
 
 Settings are saved to `wperf.ini` next to the executable.

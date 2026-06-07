@@ -22,7 +22,8 @@ struct DiskMetrics {
 };
 
 struct GpuMetrics {
-    double loadPercent = 0.0;
+    double loadPercent        = 0.0;
+    double vramUsedBytes      = 0.0;
 };
 
 // Lightweight non-owning view returned by GetGpuMetrics().
@@ -47,11 +48,13 @@ public:
     void Update();
 
     double GetCpuUsage()           const { return m_cpuUsage; }
-    double GetMemoryUsagePercent() const { return m_memUsagePercent; }
+    DWORD GetMemoryUsagePercent() const { return m_memUsagePercent; }
+    DWORDLONG GetMemoryUsage() const { return m_memUsage; }
+    DWORDLONG GetMemoryAvailable() const { return m_memAvail; }
 
     const NetworkMetrics& GetNetworkMetrics() const { return m_networkMetrics; }
     const DiskMetrics&    GetDiskMetrics()    const { return m_diskMetrics; }
-    GpuMetricsView GetGpuMetrics()     const { return {m_gpuData, m_gpuCount}; }
+    const GpuMetricsView GetGpuMetrics()     const { return {m_gpuData, m_gpuCount}; }
 
     wchar_t* GetTextBuffer() { return m_textBuffer; }   
 private:
@@ -71,7 +74,9 @@ private:
     double   m_cpuUsage       = 0.0;
 
     // Memory state
-    double m_memUsagePercent = 0.0;
+    DWORD m_memUsagePercent = 0;
+    DWORDLONG m_memUsage = 0;
+    DWORDLONG m_memAvail = 0;
 
     // Network state
     // m_ifIndices points into m_slab; populated once in InitNetwork, read-only thereafter
@@ -90,9 +95,10 @@ private:
     DiskMetrics m_diskMetrics{};
 
     // GPU state
-    // m_gpuCounters and m_gpuData point into m_slab
-    HANDLE*     m_gpuCounters = nullptr;
-    GpuMetrics* m_gpuData     = nullptr;
+    // m_gpuCounters, m_gpuVramUsedCounters and m_gpuData point into m_slab
+    HANDLE*     m_gpuCounters          = nullptr;
+    HANDLE*     m_gpuVramUsedCounters  = nullptr;
+    GpuMetrics* m_gpuData              = nullptr;
     DWORD       m_gpuCount    = 0;
     HANDLE      m_hGpuQuery   = nullptr;
 
