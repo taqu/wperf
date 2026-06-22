@@ -1,187 +1,201 @@
+#include "resource.h"
 #include "resource_monitor.h"
+#include <algorithm>
 #include <cassert>
 #include <commctrl.h>
 #include <cstdint>
 #include <dxgi.h>
-#include <algorithm>
 #include <windows.h>
-
+#include "purge_memory.h"
 // Main window proc and helpers
 LRESULT CALLBACK MainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
+namespace wperf
+{
 LRESULT OnPaintMain(HWND hwnd, ResourceMonitor& monitor);
 LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 void ShowSettingsDialog(HWND hwndParent);
+void ShowMemoryPurgeDialog(HWND hwndParent);
 
 namespace
 {
-ResourceMonitor g_monitor;
-static const wchar_t* AppName = L"wperf";
-static const wchar_t* IniFileName = L"wperf.ini";
-static const wchar_t* SettingsName = L"Settings";
-static constexpr float Giga = 1024.0f * 1024.0f * 1024.0f;
-static constexpr float Mega = 1024.0f * 1024.0f;
-static constexpr float Kilo = 1024.0f;
+    ResourceMonitor g_monitor;
+    PurgeMemoryProcesses g_purgeProcesses;
+    static const wchar_t* AppName = L"wperf";
+    static const wchar_t* IniFileName = L"wperf.ini";
+    static const wchar_t* SettingsName = L"Settings";
+    static constexpr float Giga = 1024.0f * 1024.0f * 1024.0f;
+    static constexpr float Mega = 1024.0f * 1024.0f;
+    static constexpr float Kilo = 1024.0f;
 
-DWORD GetModulePath(DWORD size, wchar_t* buffer)
-{
-    buffer[0] = L'\0';
-    DWORD length = GetModuleFileNameW(nullptr, buffer, size);
-    if(length < ResourceMonitor::kBufferSize) {
-        return length;
+    static constexpr int32_t MenuID_Settings = 1001;
+    static constexpr int32_t MenuID_MemoryPurge = 1002;
+    static constexpr int32_t MenuID_Exit = 1003;
+
+    static constexpr int32_t TimerID_PurgeMemory = 2;
+
+    DWORD GetModulePath(DWORD size, wchar_t* buffer)
+    {
+        buffer[0] = L'\0';
+        DWORD length = GetModuleFileNameW(nullptr, buffer, size);
+        if(length < ResourceMonitor::kBufferSize) {
+            return length;
+        }
+        return 0;
     }
-    return 0;
-}
 
-DWORD GetIniFilePath(DWORD size, wchar_t* buffer)
-{
-    DWORD length = GetModulePath(size, buffer);
-    const wchar_t* last_slash = nullptr;
-    if (0<length) {
-        for (size_t i = length; 0<i; --i) {
-            wchar_t c = buffer[i - 1];
-            if (c == L'\\' || c == L'/') {
-                last_slash = &buffer[i - 1];
-                break;
+    DWORD GetIniFilePath(DWORD size, wchar_t* buffer)
+    {
+        DWORD length = GetModulePath(size, buffer);
+        const wchar_t* last_slash = nullptr;
+        if(0 < length) {
+            for(size_t i = length; 0 < i; --i) {
+                wchar_t c = buffer[i - 1];
+                if(c == L'\\' || c == L'/') {
+                    last_slash = &buffer[i - 1];
+                    break;
+                }
             }
         }
-    }
 
-    if (nullptr != last_slash) {
-        size_t dir_len = (size_t)(last_slash - buffer) + 1;
-        if (dir_len < size) {
-            buffer[dir_len] = L'\0';
-            wcsncat_s(buffer, size, IniFileName, wcslen(IniFileName));
-            return static_cast<DWORD>(length+dir_len);
+        if(nullptr != last_slash) {
+            size_t dir_len = (size_t)(last_slash - buffer) + 1;
+            if(dir_len < size) {
+                buffer[dir_len] = L'\0';
+                wcsncat_s(buffer, size, IniFileName, wcslen(IniFileName));
+                return static_cast<DWORD>(length + dir_len);
+            }
+        } else {
+            length = static_cast<DWORD>(wcslen(IniFileName));
+            wcsncpy_s(buffer, size, IniFileName, length);
+            buffer[length] = L'\0';
+            return length;
         }
-    } else {
-        length = static_cast<DWORD>(wcslen(IniFileName));
-        wcsncpy_s(buffer, size, IniFileName, length);
-        buffer[length] = L'\0';
-        return length;
-    }
-    return 0;
-}
-
-void FormatBytes(DWORD size, wchar_t* buffer, ULONGLONG bytes)
-{
-    swprintf_s(buffer, size, L"%.1f GB", (float)bytes / Giga);
-}
-
-void FormatNetworkSpeed(DWORD size, wchar_t* buffer, double bps)
-{
-    if(bps >= Giga)
-        swprintf_s(buffer, size, L"%.2f GB/s", bps / Giga);
-    else if(bps >= Mega)
-        swprintf_s(buffer, size, L"%.2f MB/s", bps / Mega);
-    else if(bps >= Kilo)
-        swprintf_s(buffer, size, L"%.1f KB/s", bps / Kilo);
-    else
-        swprintf_s(buffer, size, L"%.0f B/s", bps);
-}
-
-void DrawCard(HDC hdc, const RECT& rect, COLORREF accentColor)
-{
-    // 1. Draw card background (slightly lighter dark gray)
-    HBRUSH hbrCard = CreateSolidBrush(RGB(24, 24, 29));
-    FillRect(hdc, &rect, hbrCard);
-    DeleteObject(hbrCard);
-
-    // 2. Draw 1px card border
-    HPEN hPenBorder = CreatePen(PS_SOLID, 1, RGB(45, 45, 55));
-    HPEN hPenOld = (HPEN)SelectObject(hdc, hPenBorder);
-    MoveToEx(hdc, rect.left, rect.top, nullptr);
-    LineTo(hdc, rect.right - 1, rect.top);
-    LineTo(hdc, rect.right - 1, rect.bottom - 1);
-    LineTo(hdc, rect.left, rect.bottom - 1);
-    LineTo(hdc, rect.left, rect.top);
-    SelectObject(hdc, hPenOld);
-    DeleteObject(hPenBorder);
-
-    // 3. Draw 4px neon vertical accent bar on the left edge
-    RECT accentRect = {rect.left + 1, rect.top + 1, rect.left + 5, rect.bottom - 1};
-    HBRUSH hbrAccent = CreateSolidBrush(accentColor);
-    FillRect(hdc, &accentRect, hbrAccent);
-    DeleteObject(hbrAccent);
-}
-
-void DrawProgressBar(HDC hdc, const RECT& rect, double percentage, COLORREF color)
-{
-    // 1. Draw progress bar background slot
-    HBRUSH hbrSlot = CreateSolidBrush(RGB(40, 40, 46));
-    FillRect(hdc, &rect, hbrSlot);
-    DeleteObject(hbrSlot);
-
-    // 2. Calculate and draw filled bar bounds
-    int32_t totalWidth = rect.right - rect.left;
-    int32_t fillWidth = (int32_t)(totalWidth * (percentage / 100.0));
-    fillWidth = std::clamp(fillWidth, 0, totalWidth);
-
-    if(fillWidth > 0) {
-        RECT fillRect = {rect.left, rect.top, rect.left + fillWidth, rect.bottom};
-        HBRUSH hbrFill = CreateSolidBrush(color);
-        FillRect(hdc, &fillRect, hbrFill);
-        DeleteObject(hbrFill);
+        return 0;
     }
 
-    // 3. Draw simple dark outline for depth
-    HPEN hPenOutline = CreatePen(PS_SOLID, 1, RGB(30, 30, 35));
-    HPEN hPenOld = (HPEN)SelectObject(hdc, hPenOutline);
-    MoveToEx(hdc, rect.left, rect.top, nullptr);
-    LineTo(hdc, rect.right - 1, rect.top);
-    LineTo(hdc, rect.right - 1, rect.bottom - 1);
-    LineTo(hdc, rect.left, rect.bottom - 1);
-    LineTo(hdc, rect.left, rect.top);
-    SelectObject(hdc, hPenOld);
-    DeleteObject(hPenOutline);
-}
-struct AppSettings {
-    int32_t updateIntervalMs = 1000;
-    bool alwaysOnTop = false;
-};
-AppSettings g_settings;
-HWND g_hwndSettings = nullptr;
-
-static constexpr int kDlgIntervalEdit   = 2001;
-static constexpr int kDlgAlwaysOnTopChk = 2002;
-static constexpr int kDlgOK             = 2003;
-static constexpr int kDlgCancel         = 2004;
-static constexpr wchar_t SettingsClassName[] = L"wperfSettings";
-
-void LoadSettings(size_t length, const wchar_t* iniPath)
-{
-    if(length<=0){
-        return;
+    void FormatBytes(DWORD size, wchar_t* buffer, ULONGLONG bytes)
+    {
+        swprintf_s(buffer, size, L"%.1f GB", (float)bytes / Giga);
     }
-    g_settings.updateIntervalMs = std::clamp((int32_t)GetPrivateProfileIntW(SettingsName, L"UpdateIntervalMs", 1000, iniPath), 250, 60000);
-    g_settings.alwaysOnTop = GetPrivateProfileIntW(SettingsName, L"AlwaysOnTop", 0, iniPath) != 0;
-}
 
-void SaveSettings(const wchar_t* iniPath)
-{
-    wchar_t intervalStr[16];
-    swprintf_s(intervalStr, L"%d", g_settings.updateIntervalMs);
-    WritePrivateProfileStringW(SettingsName, L"UpdateIntervalMs", intervalStr, iniPath);
-    WritePrivateProfileStringW(SettingsName, L"AlwaysOnTop", g_settings.alwaysOnTop ? L"1" : L"0", iniPath);
-}
-
-int32_t CountGpuAdapters()
-{
-    IDXGIFactory1* pFactory = nullptr;
-    if (FAILED(CreateDXGIFactory1(__uuidof(IDXGIFactory1), (void**)&pFactory)))
-        return 1;
-    int32_t count = 0;
-    UINT idx = 0;
-    IDXGIAdapter1* pAdapter = nullptr;
-    while (pFactory->EnumAdapters1(idx++, &pAdapter) != DXGI_ERROR_NOT_FOUND) {
-        DXGI_ADAPTER_DESC1 desc{};
-        pAdapter->GetDesc1(&desc);
-        if (!(desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE))
-            ++count;
-        pAdapter->Release();
+    void FormatNetworkSpeed(DWORD size, wchar_t* buffer, double bps)
+    {
+        if(bps >= Giga)
+            swprintf_s(buffer, size, L"%.2f GB/s", bps / Giga);
+        else if(bps >= Mega)
+            swprintf_s(buffer, size, L"%.2f MB/s", bps / Mega);
+        else if(bps >= Kilo)
+            swprintf_s(buffer, size, L"%.1f KB/s", bps / Kilo);
+        else
+            swprintf_s(buffer, size, L"%.0f B/s", bps);
     }
-    pFactory->Release();
-    return count > 0 ? count : 1;
-}
+
+    void DrawCard(HDC hdc, const RECT& rect, COLORREF accentColor)
+    {
+        // 1. Draw card background (slightly lighter dark gray)
+        HBRUSH hbrCard = CreateSolidBrush(RGB(24, 24, 29));
+        FillRect(hdc, &rect, hbrCard);
+        DeleteObject(hbrCard);
+
+        // 2. Draw 1px card border
+        HPEN hPenBorder = CreatePen(PS_SOLID, 1, RGB(45, 45, 55));
+        HPEN hPenOld = (HPEN)SelectObject(hdc, hPenBorder);
+        MoveToEx(hdc, rect.left, rect.top, nullptr);
+        LineTo(hdc, rect.right - 1, rect.top);
+        LineTo(hdc, rect.right - 1, rect.bottom - 1);
+        LineTo(hdc, rect.left, rect.bottom - 1);
+        LineTo(hdc, rect.left, rect.top);
+        SelectObject(hdc, hPenOld);
+        DeleteObject(hPenBorder);
+
+        // 3. Draw 4px neon vertical accent bar on the left edge
+        RECT accentRect = {rect.left + 1, rect.top + 1, rect.left + 5, rect.bottom - 1};
+        HBRUSH hbrAccent = CreateSolidBrush(accentColor);
+        FillRect(hdc, &accentRect, hbrAccent);
+        DeleteObject(hbrAccent);
+    }
+
+    void DrawProgressBar(HDC hdc, const RECT& rect, double percentage, COLORREF color)
+    {
+        // 1. Draw progress bar background slot
+        HBRUSH hbrSlot = CreateSolidBrush(RGB(40, 40, 46));
+        FillRect(hdc, &rect, hbrSlot);
+        DeleteObject(hbrSlot);
+
+        // 2. Calculate and draw filled bar bounds
+        int32_t totalWidth = rect.right - rect.left;
+        int32_t fillWidth = (int32_t)(totalWidth * (percentage / 100.0));
+        fillWidth = std::clamp(fillWidth, 0, totalWidth);
+
+        if(fillWidth > 0) {
+            RECT fillRect = {rect.left, rect.top, rect.left + fillWidth, rect.bottom};
+            HBRUSH hbrFill = CreateSolidBrush(color);
+            FillRect(hdc, &fillRect, hbrFill);
+            DeleteObject(hbrFill);
+        }
+
+        // 3. Draw simple dark outline for depth
+        HPEN hPenOutline = CreatePen(PS_SOLID, 1, RGB(30, 30, 35));
+        HPEN hPenOld = (HPEN)SelectObject(hdc, hPenOutline);
+        MoveToEx(hdc, rect.left, rect.top, nullptr);
+        LineTo(hdc, rect.right - 1, rect.top);
+        LineTo(hdc, rect.right - 1, rect.bottom - 1);
+        LineTo(hdc, rect.left, rect.bottom - 1);
+        LineTo(hdc, rect.left, rect.top);
+        SelectObject(hdc, hPenOld);
+        DeleteObject(hPenOutline);
+    }
+    struct AppSettings
+    {
+        int32_t updateIntervalMs = 1000;
+        bool alwaysOnTop = false;
+    };
+    AppSettings g_settings;
+    HWND g_hwndToolWindow = nullptr;
+
+    static constexpr int kDlgIntervalEdit = 2001;
+    static constexpr int kDlgAlwaysOnTopChk = 2002;
+    static constexpr int kDlgOK = 2003;
+    static constexpr int kDlgCancel = 2004;
+    static constexpr int kDlgProgress = 2005;
+    static constexpr wchar_t SettingsClassName[] = L"wperfSettings";
+    static constexpr wchar_t MemoryPurgeClassName[] = L"wperfMemoryPurge";
+
+    void LoadSettings(size_t length, const wchar_t* iniPath)
+    {
+        if(length <= 0) {
+            return;
+        }
+        g_settings.updateIntervalMs = std::clamp((int32_t)GetPrivateProfileIntW(SettingsName, L"UpdateIntervalMs", 1000, iniPath), 250, 60000);
+        g_settings.alwaysOnTop = GetPrivateProfileIntW(SettingsName, L"AlwaysOnTop", 0, iniPath) != 0;
+    }
+
+    void SaveSettings(const wchar_t* iniPath)
+    {
+        wchar_t intervalStr[16];
+        swprintf_s(intervalStr, L"%d", g_settings.updateIntervalMs);
+        WritePrivateProfileStringW(SettingsName, L"UpdateIntervalMs", intervalStr, iniPath);
+        WritePrivateProfileStringW(SettingsName, L"AlwaysOnTop", g_settings.alwaysOnTop ? L"1" : L"0", iniPath);
+    }
+
+    int32_t CountGpuAdapters()
+    {
+        IDXGIFactory1* pFactory = nullptr;
+        if(FAILED(CreateDXGIFactory1(__uuidof(IDXGIFactory1), (void**)&pFactory)))
+            return 1;
+        int32_t count = 0;
+        UINT idx = 0;
+        IDXGIAdapter1* pAdapter = nullptr;
+        while(pFactory->EnumAdapters1(idx++, &pAdapter) != DXGI_ERROR_NOT_FOUND) {
+            DXGI_ADAPTER_DESC1 desc{};
+            pAdapter->GetDesc1(&desc);
+            if(!(desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE))
+                ++count;
+            pAdapter->Release();
+        }
+        pFactory->Release();
+        return count > 0 ? count : 1;
+    }
 } // namespace
 
 LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
@@ -197,27 +211,27 @@ LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPa
         HINSTANCE hInst = GetModuleHandleW(nullptr);
 
         CreateWindowExW(0, L"STATIC", L"Update interval (ms):",
-            WS_CHILD | WS_VISIBLE | SS_LEFT,
-            12, 16, 160, 20, hwnd, nullptr, hInst, nullptr);
+                        WS_CHILD | WS_VISIBLE | SS_LEFT,
+                        12, 16, 160, 20, hwnd, nullptr, hInst, nullptr);
 
         wchar_t buf[16];
         swprintf_s(buf, L"%d", g_settings.updateIntervalMs);
         CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", buf,
-            WS_CHILD | WS_VISIBLE | ES_NUMBER | WS_TABSTOP,
-            180, 13, 72, 22, hwnd, (HMENU)(UINT_PTR)kDlgIntervalEdit, hInst, nullptr);
+                        WS_CHILD | WS_VISIBLE | ES_NUMBER | WS_TABSTOP,
+                        180, 13, 72, 22, hwnd, (HMENU)(UINT_PTR)kDlgIntervalEdit, hInst, nullptr);
 
         CreateWindowExW(0, L"BUTTON", L"Always on top",
-            WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX | WS_TABSTOP,
-            12, 48, 160, 22, hwnd, (HMENU)(UINT_PTR)kDlgAlwaysOnTopChk, hInst, nullptr);
+                        WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX | WS_TABSTOP,
+                        12, 48, 160, 22, hwnd, (HMENU)(UINT_PTR)kDlgAlwaysOnTopChk, hInst, nullptr);
         SendDlgItemMessageW(hwnd, kDlgAlwaysOnTopChk, BM_SETCHECK,
-            g_settings.alwaysOnTop ? BST_CHECKED : BST_UNCHECKED, 0);
+                            g_settings.alwaysOnTop ? BST_CHECKED : BST_UNCHECKED, 0);
 
         CreateWindowExW(0, L"BUTTON", L"OK",
-            WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON | WS_TABSTOP,
-            58, 82, 72, 26, hwnd, (HMENU)(UINT_PTR)kDlgOK, hInst, nullptr);
+                        WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_FLAT,
+                        58, 82, 72, 26, hwnd, (HMENU)(UINT_PTR)kDlgOK, hInst, nullptr);
         CreateWindowExW(0, L"BUTTON", L"Cancel",
-            WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | WS_TABSTOP,
-            140, 82, 72, 26, hwnd, (HMENU)(UINT_PTR)kDlgCancel, hInst, nullptr);
+                        WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_FLAT,
+                        140, 82, 72, 26, hwnd, (HMENU)(UINT_PTR)kDlgCancel, hInst, nullptr);
         return 0;
     }
 
@@ -249,6 +263,15 @@ LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPa
         return 1;
     }
 
+    case WM_NCHITTEST: {
+        // Allows the user to click and drag the borderless window from anywhere
+        LRESULT hit = DefWindowProcW(hwnd, uMsg, wParam, lParam);
+        if(hit == HTCLIENT) {
+            return HTCAPTION;
+        }
+        return hit;
+    }
+
     case WM_COMMAND: {
         int id = LOWORD(wParam);
         if(id == kDlgOK) {
@@ -267,8 +290,8 @@ LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPa
                 KillTimer(hwndMain, 1);
                 SetTimer(hwndMain, 1, g_settings.updateIntervalMs, nullptr);
                 SetWindowPos(hwndMain,
-                    g_settings.alwaysOnTop ? HWND_TOPMOST : HWND_BOTTOM,
-                    0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                             g_settings.alwaysOnTop ? HWND_TOPMOST : HWND_BOTTOM,
+                             0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
             }
             DestroyWindow(hwnd);
         } else if(id == kDlgCancel) {
@@ -282,9 +305,150 @@ LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPa
         return 0;
 
     case WM_NCDESTROY: {
-        if(s_hbrDark) { DeleteObject(s_hbrDark); s_hbrDark = nullptr; }
-        if(s_hbrEdit) { DeleteObject(s_hbrEdit); s_hbrEdit = nullptr; }
-        g_hwndSettings = nullptr;
+        if(s_hbrDark) {
+            DeleteObject(s_hbrDark);
+            s_hbrDark = nullptr;
+        }
+        if(s_hbrEdit) {
+            DeleteObject(s_hbrEdit);
+            s_hbrEdit = nullptr;
+        }
+        g_hwndToolWindow = nullptr;
+        return 0;
+    }
+    }
+    return DefWindowProcW(hwnd, uMsg, wParam, lParam);
+}
+
+namespace
+{
+    int32_t count_digits(int32_t num)
+    {
+        int32_t digits = 0;
+        if(num == 0) {
+            digits = 1;
+        } else {
+            int32_t temp = std::abs(num);
+            while(0 < temp) {
+                temp /= 10;
+                ++digits;
+            }
+        }
+        return digits;
+    }
+} // namespace
+
+LRESULT CALLBACK MemoryPurgeWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+    static HBRUSH s_hbrDark = nullptr;
+    static HBRUSH s_hbrLight = nullptr;
+
+    switch(uMsg) {
+    case WM_CREATE: {
+        s_hbrDark = CreateSolidBrush(RGB(18, 18, 20));
+        s_hbrLight = CreateSolidBrush(RGB(200, 200, 210));
+        HINSTANCE hInst = GetModuleHandleW(nullptr);
+        CreateWindowExW(0, L"BUTTON", L"Cancel",
+                        WS_CHILD | WS_VISIBLE | BS_FLAT | WS_TABSTOP,
+                        140, 82, 72, 26, hwnd, (HMENU)(UINT_PTR)kDlgCancel, hInst, nullptr);
+        SetTimer(hwnd, TimerID_PurgeMemory, 1000, nullptr);
+        BeginMemory(g_purgeProcesses);
+        return 0;
+    }
+    case WM_TIMER: {
+        if(wParam == TimerID_PurgeMemory) {
+            if(g_purgeProcesses.isEnd()){
+                DestroyWindow(hwnd);
+                return 0;
+            }
+            PurgeMemory(g_purgeProcesses);
+            InvalidateRect(hwnd, nullptr, FALSE);
+        }
+        return 0;
+    }
+
+    case WM_CTLCOLORSTATIC: {
+        HDC hdc = (HDC)wParam;
+        SetTextColor(hdc, RGB(200, 200, 210));
+        SetBkMode(hdc, TRANSPARENT);
+        return (LRESULT)s_hbrDark;
+    }
+
+    case WM_CTLCOLORBTN: {
+        HDC hdc = (HDC)wParam;
+        SetTextColor(hdc, RGB(200, 200, 210));
+        SetBkMode(hdc, TRANSPARENT);
+        return (LRESULT)s_hbrDark;
+    }
+
+    case WM_ERASEBKGND: {
+        RECT rc;
+        GetClientRect(hwnd, &rc);
+        FillRect((HDC)wParam, &rc, s_hbrDark);
+        return 1;
+    }
+
+    case WM_PAINT: {
+        PAINTSTRUCT ps;
+        HDC hdc = BeginPaint(hwnd, &ps);
+        RECT rc;
+        GetClientRect(hwnd, &rc);
+        FillRect(hdc, &rc, s_hbrDark);
+        rc.left += 5;
+        rc.top += 5;
+        rc.right -= 5;
+        rc.bottom -= 5;
+        FrameRect(hdc, &rc, s_hbrLight);
+        RECT progressTop = {rc.left, rc.top, rc.right, rc.top + 20};
+        SetBkColor(hdc, RGB(200, 200, 210));
+        if(g_purgeProcesses.numProcesses_ <= 0) {
+            DrawTextW(hdc, L"0/0", -1, &progressTop, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+        } else {
+            int32_t digits = count_digits(g_purgeProcesses.numProcesses_);
+            int32_t progressWidth = (rc.right * g_purgeProcesses.current_) / g_purgeProcesses.numProcesses_;
+            RECT rcProgress = {rc.left, rc.top, progressWidth, rc.bottom};
+            FillRect(hdc, &rcProgress, s_hbrLight);
+            wchar_t progressStr[32];
+            swprintf_s(progressStr, L"%*d/%*d", digits, g_purgeProcesses.current_, digits, g_purgeProcesses.numProcesses_);
+            DrawTextW(hdc, progressStr, -1, &progressTop, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+        }
+        EndPaint(hwnd, &ps);
+        break;
+    }
+    case WM_COMMAND: {
+        int id = LOWORD(wParam);
+        if(id == kDlgOK) {
+            DestroyWindow(hwnd);
+        } else if(id == kDlgCancel) {
+            DestroyWindow(hwnd);
+        }
+        return 0;
+    }
+
+    case WM_NCHITTEST: {
+        // Allows the user to click and drag the borderless window from anywhere
+        LRESULT hit = DefWindowProcW(hwnd, uMsg, wParam, lParam);
+        if(hit == HTCLIENT) {
+            return HTCAPTION;
+        }
+        return hit;
+    }
+
+    case WM_CLOSE:
+        DestroyWindow(hwnd);
+        return 0;
+
+    case WM_NCDESTROY: {
+        KillTimer(hwnd, 1);
+        if(s_hbrDark) {
+            DeleteObject(s_hbrDark);
+            s_hbrDark = nullptr;
+        }
+        if(s_hbrLight) {
+            DeleteObject(s_hbrLight);
+            s_hbrLight = nullptr;
+        }
+        g_hwndToolWindow = nullptr;
         return 0;
     }
     }
@@ -293,14 +457,14 @@ LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 
 void ShowSettingsDialog(HWND hwndParent)
 {
-    if(g_hwndSettings) {
-        SetForegroundWindow(g_hwndSettings);
+    if(g_hwndToolWindow) {
+        SetForegroundWindow(g_hwndToolWindow);
         return;
     }
 
     RECT rc = {0, 0, 268, 120};
-    AdjustWindowRectEx(&rc, WS_POPUP | WS_CAPTION | WS_SYSMENU, FALSE,
-        WS_EX_DLGMODALFRAME | WS_EX_TOOLWINDOW);
+    AdjustWindowRectEx(&rc, WS_POPUP, FALSE,
+                       WS_EX_DLGMODALFRAME | WS_EX_TOOLWINDOW);
 
     RECT parentRect;
     GetWindowRect(hwndParent, &parentRect);
@@ -309,25 +473,31 @@ void ShowSettingsDialog(HWND hwndParent)
     int x = parentRect.left + (parentRect.right - parentRect.left - dlgW) / 2;
     int y = parentRect.top + (parentRect.bottom - parentRect.top - dlgH) / 2;
 
-    g_hwndSettings = CreateWindowExW(
+    g_hwndToolWindow = CreateWindowExW(
         WS_EX_DLGMODALFRAME | WS_EX_TOOLWINDOW,
         SettingsClassName, L"Settings",
-        WS_POPUP | WS_CAPTION | WS_SYSMENU,
+        WS_POPUP,
         x, y, dlgW, dlgH,
         hwndParent, nullptr, GetModuleHandleW(nullptr), nullptr);
 
-    if(!g_hwndSettings) return;
+    if(!g_hwndToolWindow){
+        return;
+    }
 
     EnableWindow(hwndParent, FALSE);
-    ShowWindow(g_hwndSettings, SW_SHOW);
-    UpdateWindow(g_hwndSettings);
+    ShowWindow(g_hwndToolWindow, SW_SHOW);
+    UpdateWindow(g_hwndToolWindow);
 
     MSG msg;
-    while(g_hwndSettings) {
+    while(g_hwndToolWindow) {
         BOOL ret = GetMessageW(&msg, nullptr, 0, 0);
-        if(ret == 0) { PostQuitMessage((int)msg.wParam); break; }
-        if(ret == -1) break;
-        if(!IsDialogMessageW(g_hwndSettings, &msg)) {
+        if(ret == 0) {
+            PostQuitMessage((int)msg.wParam);
+            break;
+        }
+        if(ret == -1)
+            break;
+        if(!IsDialogMessageW(g_hwndToolWindow, &msg)) {
             TranslateMessage(&msg);
             DispatchMessageW(&msg);
         }
@@ -339,8 +509,64 @@ void ShowSettingsDialog(HWND hwndParent)
     }
 }
 
+void ShowMemoryPurgeDialog(HWND hwndParent)
+{
+    if(g_hwndToolWindow) {
+        SetForegroundWindow(g_hwndToolWindow);
+        return;
+    }
+
+    RECT rc = {0, 0, 240, 32};
+    AdjustWindowRectEx(&rc, WS_POPUP, FALSE, WS_EX_DLGMODALFRAME | WS_EX_TOOLWINDOW);
+
+    RECT parentRect;
+    GetWindowRect(hwndParent, &parentRect);
+    int dlgW = rc.right - rc.left;
+    int dlgH = rc.bottom - rc.top;
+    int x = parentRect.left + (parentRect.right - parentRect.left - dlgW) / 2;
+    int y = parentRect.top + (parentRect.bottom - parentRect.top - dlgH) / 2;
+
+    g_hwndToolWindow = CreateWindowExW(
+        WS_EX_DLGMODALFRAME | WS_EX_TOOLWINDOW,
+        MemoryPurgeClassName, L"MemoryPurge",
+        WS_POPUP,
+        x, y, dlgW, dlgH,
+        hwndParent, nullptr, GetModuleHandleW(nullptr), nullptr);
+
+    if(nullptr == g_hwndToolWindow){
+        return;
+    }
+
+    EnableWindow(hwndParent, FALSE);
+    ShowWindow(g_hwndToolWindow, SW_SHOW);
+    UpdateWindow(g_hwndToolWindow);
+
+    MSG msg;
+    while(g_hwndToolWindow) {
+        BOOL ret = GetMessageW(&msg, nullptr, 0, 0);
+        if(ret == 0) {
+            PostQuitMessage((int)msg.wParam);
+            break;
+        }
+        if(ret == -1)
+            break;
+        if(!IsDialogMessageW(g_hwndToolWindow, &msg)) {
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+    }
+
+    if(IsWindow(hwndParent)) {
+        EnableWindow(hwndParent, TRUE);
+        SetForegroundWindow(hwndParent);
+    }
+}
+
+} // namespace wperf
+
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
 {
+    using namespace wperf;
     UNREFERENCED_PARAMETER(hPrevInstance);
     UNREFERENCED_PARAMETER(lpCmdLine);
 
@@ -350,32 +576,48 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     // Enable high DPI awareness to make layouts and fonts razor-sharp
     SetProcessDPIAware();
 
-    // Register Main Window Class
-    WNDCLASSEXW wcx = {0};
-    wcx.cbSize = sizeof(wcx);
-    wcx.style = CS_HREDRAW | CS_VREDRAW;
-    wcx.lpfnWndProc = MainWndProc;
-    wcx.hInstance = hInstance;
-    wcx.hIcon = LoadIcon(nullptr, IDI_APPLICATION);
-    wcx.hCursor = LoadCursor(nullptr, IDC_ARROW);
-    wcx.hbrBackground = nullptr; // Managed entirely by double buffer in OnPaint
-    wcx.lpszClassName = AppName;
+    { // Register Main Window Class
+        WNDCLASSEXW wcx = {0};
+        wcx.cbSize = sizeof(wcx);
+        wcx.style = CS_HREDRAW | CS_VREDRAW;
+        wcx.lpfnWndProc = MainWndProc;
+        wcx.hInstance = hInstance;
+        wcx.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_ICON_MAIN));
+        wcx.hCursor = LoadCursor(nullptr, IDC_ARROW);
+        wcx.hbrBackground = nullptr; // Managed entirely by double buffer in OnPaint
+        wcx.lpszClassName = wperf::AppName;
 
-    if(!RegisterClassExW(&wcx)) {
-        MessageBoxW(nullptr, L"Failed to register main window class!", L"Error", MB_ICONERROR);
-        return 1;
+        if(!RegisterClassExW(&wcx)) {
+            MessageBoxW(nullptr, L"Failed to register main window class!", L"Error", MB_ICONERROR);
+            return 1;
+        }
     }
     g_monitor.Initialize();
 
-    WNDCLASSEXW wcxSettings = {0};
-    wcxSettings.cbSize = sizeof(wcxSettings);
-    wcxSettings.style = CS_HREDRAW | CS_VREDRAW;
-    wcxSettings.lpfnWndProc = SettingsWndProc;
-    wcxSettings.hInstance = hInstance;
-    wcxSettings.hCursor = LoadCursor(nullptr, IDC_ARROW);
-    wcxSettings.hbrBackground = nullptr;
-    wcxSettings.lpszClassName = SettingsClassName;
-    RegisterClassExW(&wcxSettings);
+    { // Register Settings Dialog Window Class
+        WNDCLASSEXW wcxSettings = {0};
+        wcxSettings.cbSize = sizeof(wcxSettings);
+        wcxSettings.style = CS_HREDRAW | CS_VREDRAW;
+        wcxSettings.lpfnWndProc = SettingsWndProc;
+        wcxSettings.hInstance = hInstance;
+        wcxSettings.hCursor = LoadCursor(nullptr, IDC_ARROW);
+        wcxSettings.hbrBackground = nullptr;
+        wcxSettings.lpszClassName = SettingsClassName;
+        RegisterClassExW(&wcxSettings);
+    }
+
+    { // Register Memory Purge Dialog Window Class
+        WNDCLASSEXW wcxSettings = {0};
+        wcxSettings.cbSize = sizeof(wcxSettings);
+        wcxSettings.style = CS_HREDRAW | CS_VREDRAW;
+        wcxSettings.lpfnWndProc = MemoryPurgeWndProc;
+        wcxSettings.hInstance = hInstance;
+        wcxSettings.hCursor = LoadCursor(nullptr, IDC_ARROW);
+        wcxSettings.hbrBackground = nullptr;
+        wcxSettings.lpszClassName = MemoryPurgeClassName;
+        RegisterClassExW(&wcxSettings);
+    }
+
 
     // Load last coordinates from wperf.ini
     DWORD length = GetIniFilePath(ResourceMonitor::kBufferWChars, g_monitor.GetTextBuffer());
@@ -409,7 +651,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     }
 
     SetWindowPos(hwnd, g_settings.alwaysOnTop ? HWND_TOPMOST : HWND_BOTTOM,
-        0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     ShowWindow(hwnd, nCmdShow);
     UpdateWindow(hwnd);
 
@@ -426,11 +668,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
 LRESULT CALLBACK MainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
+    using namespace wperf;
     switch(uMsg) {
     case WM_CREATE: {
         SetPriorityClass(GetCurrentProcess(), PROCESS_MODE_BACKGROUND_BEGIN);
-        // High precision standard 1-second system timer
+        // High precision standard system timer
         SetTimer(hwnd, 1, g_settings.updateIntervalMs, nullptr);
+        PurgeMemory(GetCurrentProcess());
         return 0;
     }
 
@@ -467,9 +711,10 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
     case WM_RBUTTONUP:
     case WM_NCRBUTTONUP: {
         HMENU hMenu = CreatePopupMenu();
-        AppendMenuW(hMenu, MF_STRING, 1001, L"Settings");
+        AppendMenuW(hMenu, MF_STRING, MenuID_Settings, L"Settings");
+        AppendMenuW(hMenu, MF_STRING, MenuID_MemoryPurge, L"Purge Memory");
         AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
-        AppendMenuW(hMenu, MF_STRING, 1002, L"Exit");
+        AppendMenuW(hMenu, MF_STRING, MenuID_Exit, L"Exit");
 
         POINT pt;
         GetCursorPos(&pt);
@@ -478,9 +723,11 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         int32_t selection = TrackPopupMenu(hMenu, TPM_RETURNCMD | TPM_LEFTALIGN | TPM_RIGHTBUTTON, pt.x, pt.y, 0, hwnd, nullptr);
         DestroyMenu(hMenu);
 
-        if(selection == 1001) {
+        if(selection == MenuID_Settings) {
             ShowSettingsDialog(hwnd);
-        } else if(selection == 1002) {
+        } else if(selection == MenuID_MemoryPurge) {
+            ShowMemoryPurgeDialog(hwnd);
+        } else if(selection == MenuID_Exit) {
             DestroyWindow(hwnd);
         }
         return 0;
@@ -502,7 +749,6 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         if(GetWindowPlacement(hwnd, &wp)) {
             // Only save coordinate states if normal (not minimized)
             if(wp.showCmd == SW_SHOWNORMAL || wp.showCmd == SW_SHOW) {
-                DWORD length = GetIniFilePath(ResourceMonitor::kBufferWChars, g_monitor.GetTextBuffer());
                 wchar_t xStr[16], yStr[16];
                 swprintf_s(xStr, L"%ld", wp.rcNormalPosition.left);
                 swprintf_s(yStr, L"%ld", wp.rcNormalPosition.top);
@@ -518,6 +764,8 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
     return DefWindowProcW(hwnd, uMsg, wParam, lParam);
 }
 
+namespace wperf
+{
 LRESULT OnPaintMain(HWND hwnd, ResourceMonitor& monitor)
 {
     PAINTSTRUCT ps;
@@ -584,12 +832,10 @@ LRESULT OnPaintMain(HWND hwnd, ResourceMonitor& monitor)
     SYSTEMTIME st;
     GetLocalTime(&st);
     static const wchar_t* const s_months[] = {
-        L"Jan",L"Feb",L"Mar",L"Apr",L"May",L"Jun",
-        L"Jul",L"Aug",L"Sep",L"Oct",L"Nov",L"Dec"
-    };
+        L"Jan", L"Feb", L"Mar", L"Apr", L"May", L"Jun",
+        L"Jul", L"Aug", L"Sep", L"Oct", L"Nov", L"Dec"};
     static const wchar_t* const s_days[] = {
-        L"Sun",L"Mon",L"Tue",L"Wed",L"Thu",L"Fri",L"Sat"
-    };
+        L"Sun", L"Mon", L"Tue", L"Wed", L"Thu", L"Fri", L"Sat"};
     wchar_t timeStr[48];
     swprintf_s(timeStr, L"%s, %d %s %d %02d:%02d:%02d", s_days[st.wDayOfWeek], st.wDay, s_months[st.wMonth - 1], st.wYear, st.wHour, st.wMinute, st.wSecond);
 
@@ -606,19 +852,19 @@ LRESULT OnPaintMain(HWND hwnd, ResourceMonitor& monitor)
     int32_t cy = 30;
 
     // Fetch all metrics up front
-    const DWORD     memUsagePct = monitor.GetMemoryUsagePercent();
-    const DWORDLONG memUsage    = monitor.GetMemoryUsage();
-    const DWORDLONG memAvail    = monitor.GetMemoryAvailable();
-    const double cpuUsage    = monitor.GetCpuUsage();
-    const auto   diskMetrics = monitor.GetDiskMetrics();
-    const auto   netMetrics  = monitor.GetNetworkMetrics();
-    const auto  gpuList     = monitor.GetGpuMetrics();
+    const DWORD memUsagePct = monitor.GetMemoryUsagePercent();
+    const DWORDLONG memUsage = monitor.GetMemoryUsage();
+    const DWORDLONG memAvail = monitor.GetMemoryAvailable();
+    const double cpuUsage = monitor.GetCpuUsage();
+    const auto diskMetrics = monitor.GetDiskMetrics();
+    const auto netMetrics = monitor.GetNetworkMetrics();
+    const auto gpuList = monitor.GetGpuMetrics();
 
-    static const COLORREF kColorRam  = RGB(155, 93,  229);
-    static const COLORREF kColorCpu  = RGB(0,   242, 254);
-    static const COLORREF kColorGpu  = RGB(57,  255, 20);
-    static const COLORREF kColorDisk = RGB(255, 82,  82);
-    static const COLORREF kColorNet  = RGB(255, 159, 10);
+    static const COLORREF kColorRam = RGB(155, 93, 229);
+    static const COLORREF kColorCpu = RGB(0, 242, 254);
+    static const COLORREF kColorGpu = RGB(57, 255, 20);
+    static const COLORREF kColorDisk = RGB(255, 82, 82);
+    static const COLORREF kColorNet = RGB(255, 159, 10);
 
     // ---- 1. Memory (RAM) ----
     {
@@ -667,7 +913,7 @@ LRESULT OnPaintMain(HWND hwnd, ResourceMonitor& monitor)
     }
 
     // ---- 3. GPU (one card per adapter) ----
-    for (size_t gi = 0; gi < gpuList.size(); ++gi) {
+    for(size_t gi = 0; gi < gpuList.size(); ++gi) {
         const auto& gm = gpuList[gi];
         const int32_t gpuCardH = cardH + 14;
         RECT rCard = {12, cy, 12 + cardWidth, cy + gpuCardH};
@@ -748,3 +994,4 @@ LRESULT OnPaintMain(HWND hwnd, ResourceMonitor& monitor)
     EndPaint(hwnd, &ps);
     return 0;
 }
+} // namespace wperf

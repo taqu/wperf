@@ -6,24 +6,35 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(PROJECT_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
-include_directories(AFTER ${PROJECT_ROOT}/include)
 set(HEADER_DIR ${PROJECT_ROOT}/include)
 set(SOURCE_DIR ${PROJECT_ROOT}/src)
+set(RESOURCE_DIR ${PROJECT_ROOT}/resource)
+
+include_directories(AFTER ${HEADER_DIR})
+include_directories(AFTER ${RESOURCE_DIR})
+
 add_compile_definitions(UNICODE _UNICODE WINVER=0x0601 _WIN32_WINNT=0x0601)
 
 set(HEADERS
     ${HEADER_DIR}/resource_monitor.h
+    ${HEADER_DIR}/purge_memory.h
 )
 
 set(SOURCES
     ${SOURCE_DIR}/main.cpp
     ${SOURCE_DIR}/resource_monitor.cpp
+    ${SOURCE_DIR}/purge_memory.cpp
+)
+set(RESOURCES
+    ${RESOURCE_DIR}/resource.h
+    ${RESOURCE_DIR}/resource.rc
 )
 
 source_group("include" FILES ${HEADERS})
 source_group("src" FILES ${SOURCES})
+source_group("resource" FILES ${RESOURCES})
 
-add_executable(${PROJECT_NAME} WIN32 ${HEADERS} ${SOURCES})
+add_executable(${PROJECT_NAME} WIN32 ${HEADERS} ${SOURCES} ${RESOURCES})
 
 target_link_libraries(${PROJECT_NAME} PRIVATE
     gdi32
