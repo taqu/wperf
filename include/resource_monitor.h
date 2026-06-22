@@ -1,44 +1,57 @@
-#pragma once
+#ifndef INC_RESOURCE_MONITOR_H
+#define INC_RESOURCE_MONITOR_H
 #ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
+#    define WIN32_LEAN_AND_MEAN
 #endif
 #ifndef WINVER
-#define WINVER 0x0601
+#    define WINVER 0x0601
 #endif
 #ifndef _WIN32_WINNT
-#define _WIN32_WINNT 0x0601
+#    define _WIN32_WINNT 0x0601
 #endif
-
 #include <windows.h>
 
-struct NetworkMetrics {
+namespace wperf
+{
+struct NetworkMetrics
+{
     double downloadSpeedBps = 0.0;
-    double uploadSpeedBps   = 0.0;
+    double uploadSpeedBps = 0.0;
 };
 
-struct DiskMetrics {
-    double readBytesPerSec  = 0.0;
+struct DiskMetrics
+{
+    double readBytesPerSec = 0.0;
     double writeBytesPerSec = 0.0;
 };
 
-struct GpuMetrics {
-    double loadPercent        = 0.0;
-    double vramUsedBytes      = 0.0;
+struct GpuMetrics
+{
+    double loadPercent = 0.0;
+    double vramUsedBytes = 0.0;
 };
 
 // Lightweight non-owning view returned by GetGpuMetrics().
 // Supports the same .size() / operator[] usage as std::vector.
-struct GpuMetricsView {
-    const GpuMetrics* data  = nullptr;
-    DWORD             count = 0;
-    size_t            size()                const { return count; }
-    const GpuMetrics& operator[](size_t i)  const { return data[i]; }
+struct GpuMetricsView
+{
+    const GpuMetrics* data = nullptr;
+    DWORD count = 0;
+    size_t size() const
+    {
+        return count;
+    }
+    const GpuMetrics& operator[](size_t i) const
+    {
+        return data[i];
+    }
 };
 
-class ResourceMonitor {
+class ResourceMonitor
+{
 public:
-    inline static constexpr DWORD kBufferSize   = 2048;
-    inline static constexpr DWORD kBufferWChars = 2048/sizeof(wchar_t);
+    inline static constexpr DWORD kBufferSize = 2048;
+    inline static constexpr DWORD kBufferWChars = 2048 / sizeof(wchar_t);
 
     ResourceMonitor();
     ~ResourceMonitor();
@@ -47,16 +60,41 @@ public:
     void Terminate();
     void Update();
 
-    double GetCpuUsage()           const { return m_cpuUsage; }
-    DWORD GetMemoryUsagePercent() const { return m_memUsagePercent; }
-    DWORDLONG GetMemoryUsage() const { return m_memUsage; }
-    DWORDLONG GetMemoryAvailable() const { return m_memAvail; }
+    double GetCpuUsage() const
+    {
+        return m_cpuUsage;
+    }
+    DWORD GetMemoryUsagePercent() const
+    {
+        return m_memUsagePercent;
+    }
+    DWORDLONG GetMemoryUsage() const
+    {
+        return m_memUsage;
+    }
+    DWORDLONG GetMemoryAvailable() const
+    {
+        return m_memAvail;
+    }
 
-    const NetworkMetrics& GetNetworkMetrics() const { return m_networkMetrics; }
-    const DiskMetrics&    GetDiskMetrics()    const { return m_diskMetrics; }
-    const GpuMetricsView GetGpuMetrics()     const { return {m_gpuData, m_gpuCount}; }
+    const NetworkMetrics& GetNetworkMetrics() const
+    {
+        return m_networkMetrics;
+    }
+    const DiskMetrics& GetDiskMetrics() const
+    {
+        return m_diskMetrics;
+    }
+    const GpuMetricsView GetGpuMetrics() const
+    {
+        return {m_gpuData, m_gpuCount};
+    }
 
-    wchar_t* GetTextBuffer() { return m_textBuffer; }   
+    wchar_t* GetTextBuffer()
+    {
+        return m_textBuffer;
+    }
+
 private:
     void UpdateCpuUsage();
     void UpdateMemoryUsage();
@@ -68,10 +106,10 @@ private:
     void UpdateGpuMetrics();
 
     // CPU state
-    FILETIME m_prevIdleTime   = {};
+    FILETIME m_prevIdleTime = {};
     FILETIME m_prevKernelTime = {};
-    FILETIME m_prevUserTime   = {};
-    double   m_cpuUsage       = 0.0;
+    FILETIME m_prevUserTime = {};
+    double m_cpuUsage = 0.0;
 
     // Memory state
     DWORD m_memUsagePercent = 0;
@@ -80,32 +118,32 @@ private:
 
     // Network state
     // m_ifIndices points into m_slab; populated once in InitNetwork, read-only thereafter
-    DWORD*        m_ifIndices     = nullptr;
-    DWORD         m_ifCount       = 0;
-    ULONGLONG     m_prevInOctets  = 0;
-    ULONGLONG     m_prevOutOctets = 0;
-    LARGE_INTEGER m_prevNetTime   = {};
-    LARGE_INTEGER m_perfFreq      = {};
+    DWORD* m_ifIndices = nullptr;
+    DWORD m_ifCount = 0;
+    ULONGLONG m_prevInOctets = 0;
+    ULONGLONG m_prevOutOctets = 0;
+    LARGE_INTEGER m_prevNetTime = {};
+    LARGE_INTEGER m_perfFreq = {};
     NetworkMetrics m_networkMetrics{};
 
     // Disk state
-    HANDLE      m_hDiskQuery        = nullptr;
-    HANDLE      m_hDiskReadCounter  = nullptr;
-    HANDLE      m_hDiskWriteCounter = nullptr;
+    HANDLE m_hDiskQuery = nullptr;
+    HANDLE m_hDiskReadCounter = nullptr;
+    HANDLE m_hDiskWriteCounter = nullptr;
     DiskMetrics m_diskMetrics{};
 
     // GPU state
     // m_gpuCounters, m_gpuVramUsedCounters and m_gpuData point into m_slab
-    HANDLE*     m_gpuCounters          = nullptr;
-    HANDLE*     m_gpuVramUsedCounters  = nullptr;
-    GpuMetrics* m_gpuData              = nullptr;
-    DWORD       m_gpuCount    = 0;
-    HANDLE      m_hGpuQuery   = nullptr;
+    HANDLE* m_gpuCounters = nullptr;
+    HANDLE* m_gpuVramUsedCounters = nullptr;
+    GpuMetrics* m_gpuData = nullptr;
+    DWORD m_gpuCount = 0;
+    HANDLE m_hGpuQuery = nullptr;
 
     // PDH counter result buffer: separate VirtualAlloc, page-rounded,
     // reallocated only when the required size exceeds current capacity
-    BYTE*  m_gpuBuf    = nullptr;
-    DWORD  m_gpuBufCap = 0;
+    BYTE* m_gpuBuf = nullptr;
+    DWORD m_gpuBufCap = 0;
 
     // Temporary text buffer for formatting metric strings; shared across all calls, page-rounded
     wchar_t* m_textBuffer = nullptr;
@@ -116,3 +154,5 @@ private:
     //   [kSlabMetOff .. ) GpuMetrics[kMaxGpu]
     void* m_slab = nullptr;
 };
+} // namespace wperf
+#endif // INC_RESOURCE_MONITOR_H
