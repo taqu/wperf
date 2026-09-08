@@ -44,6 +44,10 @@ Requires **CMake 4.2+** and **Visual Studio 2019+** (MSVC with C++20).
 
 Pre-built releases are available on the [Releases](../../releases) page.
 
+## Documentation
+
+See [`docs/`](docs/) for architecture baseline, platform support matrix, and release policy.
+
 ## License
 
 [MIT](LICENSE) © 2026 taqu
