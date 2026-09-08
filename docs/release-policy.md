@@ -114,6 +114,7 @@ The following criteria must be met before tagging a final release.
 |-----------|--------|
 | Clean reproducible Release build from a fresh clone | Implemented (Phase 1) |
 | Basic Windows CI passing (Debug + Release, PR + main) | Implemented (Phase 3) |
+| Project-owned code builds cleanly at /W4 /WX /permissive- | Implemented (Phase 4) |
 | No known release-blocking issues | Pending |
 | Version constant present in source code | Planned |
 | Version resource embedded in executable (VERSIONINFO) | Planned |

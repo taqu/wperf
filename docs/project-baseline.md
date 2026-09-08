@@ -101,6 +101,8 @@ See `docs/build.md` for the complete build guide.
 
 **Output:** `build/Debug/wperf.exe`, `build/Release/wperf.exe`
 
+**Compiler diagnostics (all configurations):** `/W4 /WX /permissive- /utf-8`
+
 **Release compiler flags:** `/O2 /Oi /Gy /GL` (maximum optimization, whole-program optimization)
 
 **Release linker flags:** `/OPT:REF /OPT:ICF /LTCG` (dead code elimination, identical COMDAT folding, link-time code generation)
