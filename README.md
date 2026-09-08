@@ -2,7 +2,7 @@
 
 A lightweight Windows desktop performance overlay. Sits at the bottom of the Z-order (behind all windows) and displays live system metrics with a minimal dark UI.
 
-![wperf screenshot](doc/ss00.jpg)
+![wperf screenshot](docs/ss00.jpg)
 
 ## Features
 
