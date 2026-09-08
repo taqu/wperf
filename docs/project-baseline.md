@@ -212,19 +212,21 @@ Components that are difficult to test without a running system:
 
 ## Current CI Status
 
-**Partial.**
+**Provider**: GitHub Actions
 
 | Item | Status |
 |------|--------|
-| Release build CI | Present (triggers on `v*.*.*` tag push) |
-| PR build verification | Not present |
-| Main branch build verification | Not present |
+| PR build verification | Present — `.github/workflows/ci.yml` |
+| Main branch build verification | Present — `.github/workflows/ci.yml` |
+| Debug build CI | Present — `.github/workflows/ci.yml` |
+| Release build CI (tag-triggered) | Present — `.github/workflows/release.yml` |
 | Test CI | Not present |
 | Lint / static analysis | Not present |
-| Debug build CI | Not present |
 | Release artifact checksums | Not present |
 
-The existing workflow (`release.yml`) builds a Release configuration and uploads `wperf.exe` to the GitHub Release for the triggering tag.
+**`ci.yml`** triggers on every push to `main` and on all pull requests. It runs on `windows-latest`, configures with `cmake -S . -B build -A x64`, builds Debug and Release, and verifies both executables exist.
+
+**`release.yml`** triggers on `v*.*.*` tag pushes. It builds Release and uploads `build/Release/wperf.exe` to the GitHub Release.
 
 ---
 

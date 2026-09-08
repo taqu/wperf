@@ -108,17 +108,19 @@ wperf-v{MAJOR}.{MINOR}.{PATCH}-rc{N}-windows-x64.zip
 
 ## Release Quality Gate
 
-The following criteria must be met before tagging a final release. These are future requirements, not Phase 0 tasks.
+The following criteria must be met before tagging a final release.
 
-- [ ] Clean reproducible Release build from a fresh clone
-- [ ] Windows CI passing on all supported configurations
-- [ ] No known release-blocking issues
-- [ ] Version constant present in source code
-- [ ] Version resource embedded in executable (VERSIONINFO)
-- [ ] Documentation updated and accurate
-- [ ] Release artifact validated on a clean Windows 10 or Windows 11 environment
-- [ ] Release candidate tested before final tag
-- [ ] SHA-256 checksum generated and attached to GitHub Release
+| Criterion | Status |
+|-----------|--------|
+| Clean reproducible Release build from a fresh clone | Implemented (Phase 1) |
+| Basic Windows CI passing (Debug + Release, PR + main) | Implemented (Phase 3) |
+| No known release-blocking issues | Pending |
+| Version constant present in source code | Planned |
+| Version resource embedded in executable (VERSIONINFO) | Planned |
+| Documentation updated and accurate | In progress |
+| Release artifact validated on a clean Windows 10 or Windows 11 environment | Planned |
+| Release candidate tested before final tag | Planned |
+| SHA-256 checksum generated and attached to GitHub Release | Planned |
 
 ---
 
