@@ -1,5 +1,6 @@
 #include "purge_memory.h"
 #include <cassert>
+#include <algorithm>
 #include <Psapi.h>
 
 namespace wperf
@@ -18,7 +19,7 @@ void BeginMemory(PurgeMemoryProcesses& processes)
     if(!EnumProcesses(processes.processes_, sizeof(DWORD)*PurgeMemoryProcesses::MaxProcesses, &needed)){
         return;
     }
-    processes.numProcesses_ = needed / sizeof(DWORD);
+    processes.numProcesses_ = (std::min)(needed / sizeof(DWORD), static_cast<size_t>(PurgeMemoryProcesses::MaxProcesses));
 }
 
 void PurgeMemory(PurgeMemoryProcesses& processes)
