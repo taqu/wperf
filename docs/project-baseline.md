@@ -1,6 +1,6 @@
 # wperf Project Baseline
 
-Phase 0 repository audit baseline. Reflects actual repository state as of 2026-09-09.
+Repository baseline. Last updated 2026-09-09 (Phase 1 build verification).
 
 ---
 
@@ -90,13 +90,16 @@ Features requiring non-trivial CPU usage, memory usage, handle enumeration, proc
 | Unicode | Yes (`UNICODE`, `_UNICODE`) |
 | Windows version target | Vista+ (`WINVER=0x0601`, `_WIN32_WINNT=0x0601`) |
 
-**Build commands (Release):**
+**Build commands (canonical):**
 ```
-cmake -B build
+cmake -S . -B build -A x64
+cmake --build build --config Debug
 cmake --build build --config Release
 ```
 
-**Output:** `build/Release/wperf.exe`
+See `docs/build.md` for the complete build guide.
+
+**Output:** `build/Debug/wperf.exe`, `build/Release/wperf.exe`
 
 **Release compiler flags:** `/O2 /Oi /Gy /GL` (maximum optimization, whole-program optimization)
 
@@ -120,7 +123,7 @@ cmake --build build --config Release
 | `dxgi` | GPU adapter enumeration via DXGI | Windows / DirectX |
 | `pdh` | Performance Data Helper counters (disk, GPU) | Windows |
 
-**Note on `sapi`**: Linked in `CMakeLists.txt` but no SAPI API calls were found in source code during audit. Needs verification — likely an unused link dependency.
+**Note**: `msimg32` and `sapi` were originally linked but no call sites exist in the source. Both were removed from `CMakeLists.txt` in Phase 1. Confirmed by build and dumpbin dependency check.
 
 ---
 
@@ -263,7 +266,6 @@ The current README covers: features, settings, requirements, build instructions,
 | Risk | Severity | Notes |
 |------|----------|-------|
 | No version metadata in executable | Medium | Users and support cannot determine installed version |
-| `sapi` linked but apparently unused | Low | Unnecessary link dependency; verify and remove if unused |
 | `WINVER=0x0601` (Vista) but SDK 10.0.26100.0 | Low | Mismatch between declared and actual minimum; needs platform testing |
 | No PR/main branch build CI | Medium | Regressions not caught until a release tag is pushed |
 | No tests | Medium | Logic correctness depends entirely on manual verification |
@@ -275,9 +277,9 @@ The current README covers: features, settings, requirements, build instructions,
 
 ## Unknowns Requiring Verification
 
-1. Whether `sapi` is actually used anywhere in the codebase (no call sites found).
+1. ~~Whether `sapi` is actually used anywhere~~ — Confirmed unused; removed from build (Phase 1).
 2. Git remote URL and release tag history.
-3. Whether x86 builds are possible at all (no architecture guard in CMakeLists.txt).
+3. Whether x86 builds are possible at all (no architecture guard in CMakeLists.txt; `-A x64` now required explicitly).
 4. Behavior on systems without a DirectX 11-capable GPU.
 5. GPU PDH counter availability requirements (elevation, driver version).
 6. Whether `wperf.ini` adjacent to `wperf.exe` works correctly when installed to `Program Files` (write permission).

@@ -38,15 +38,13 @@ add_executable(${PROJECT_NAME} WIN32 ${HEADERS} ${SOURCES} ${RESOURCES})
 
 target_link_libraries(${PROJECT_NAME} PRIVATE
     gdi32
-    msimg32
     iphlpapi
-    sapi
     comctl32
     dxgi
     pdh
 )
 
-target_compile_options(${PROJECT_NAME} PRIVATE /W4)
+target_compile_options(${PROJECT_NAME} PRIVATE /W4 /utf-8)
 target_compile_options(${PROJECT_NAME} PRIVATE $<$<CONFIG:Release>:/O2 /Oi /Gy /GL>)
 target_link_options(${PROJECT_NAME} PRIVATE $<$<CONFIG:Release>:/OPT:REF /OPT:ICF /LTCG>)
 set_target_properties(${PROJECT_NAME} PROPERTIES LINK_FLAGS "/HEAP:0,0 /STACK:0,0")

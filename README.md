@@ -34,11 +34,12 @@ Settings are saved to `wperf.ini` next to the executable.
 ## Building
 
 ```
-cmake -B build
+cmake -S . -B build -A x64
 cmake --build build --config Release
 ```
 
-Requires **CMake 4.2+** and **Visual Studio 2019+** (MSVC with C++20).
+Requires **CMake 4.2+** and **Visual Studio 2022** (MSVC with C++20).
+See [docs/build.md](docs/build.md) for Debug build, clean-build procedure, and troubleshooting.
 
 ## Download
 
