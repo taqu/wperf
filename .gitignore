@@ -70,3 +70,5 @@ Testing/
 
 # Agents
 .antigravitycli/
+.claude/
+/wperf.md
