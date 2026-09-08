@@ -1,53 +1,114 @@
 # wperf
 
-A lightweight Windows desktop performance overlay. Sits at the bottom of the Z-order (behind all windows) and displays live system metrics with a minimal dark UI.
+A lightweight Windows desktop performance overlay. `wperf` sits at the bottom of the Z-order (behind all open windows) and displays live system metrics in a compact dark UI.
 
 ![wperf screenshot](docs/ss00.jpg)
 
 ## Features
 
-- **RAM** — memory usage %
 - **CPU** — total processor load %
-- **GPU** — per-adapter 3D engine utilisation % (all physical adapters)
+- **RAM** — memory usage % with used / available in GB
+- **GPU** — per-adapter 3D engine utilisation % and VRAM used (all physical adapters)
 - **DISK** — physical disk read / write throughput
 - **NET** — network download / upload speed (physical interfaces only)
 - Live clock in the header
-- Remembers window position across restarts
-- Right-click context menu with **Settings** and **Exit**
+- Window position remembered across restarts
+- Configurable update interval (250 – 60,000 ms)
+- Always-on-top mode
+- On-demand working-set memory purge
+- Right-click context menu: **Settings**, **Purge Memory**, **Exit**
 
-## Settings
+## Design Goals
 
-Right-click the overlay to open Settings:
+`wperf` is intended to remain a lightweight resident tool.
 
-| Option | Description |
-|---|---|
-| Update interval (ms) | How often metrics refresh (250 – 60,000 ms, default 1,000) |
-| Always on top | Float above all windows instead of sitting behind them |
-
-Settings are saved to `wperf.ini` next to the executable.
+- Idle resource usage stays minimal. The overlay updates on a configurable timer and suspends rendering when minimized.
+- The process runs at background priority.
+- Expensive operations such as memory purge and the planned Lock Inspector are activated on demand and introduce no continuous background polling, threads, or handle scans while inactive.
+- `wperf` is not a Task Manager replacement.
 
 ## Requirements
 
-- Windows 10 or later (x64)
-- A DirectX 11-capable GPU for GPU metrics
+**To run:**
+- Windows 10 or Windows 11, x64
+- A DirectX 11-capable GPU is required for GPU metrics; all other metrics function without one
 
-## Building
+**No installation is required.** `wperf.exe` is a standalone executable.
+
+**To build:** see [Building from Source](#building-from-source) below.
+
+## Getting Started
+
+No pre-built release is published yet. Build from source using the instructions below.
+
+Once a release is available, download `wperf.exe` from the [Releases](../../releases) page and run it directly.
+
+## Usage
+
+Run `wperf.exe`. The overlay appears on the desktop, positioned behind all other windows by default.
+
+**Right-click the overlay** to access the context menu:
+
+| Action | Description |
+|--------|-------------|
+| Settings | Opens the Settings dialog |
+| Purge Memory | Trims the working set of all accessible processes on demand |
+| Exit | Closes the application |
+
+**Settings dialog:**
+
+| Option | Description |
+|--------|-------------|
+| Update interval (ms) | How often metrics refresh (250 – 60,000 ms, default 1,000) |
+| Always on top | Float above all windows instead of sitting behind them |
+
+The overlay has no system tray icon.
+
+## Building from Source
+
+Requires **CMake 4.2+** and **Visual Studio 2022** with the Desktop development with C++ workload (MSVC v143, C++20).
 
 ```
 cmake -S . -B build -A x64
 cmake --build build --config Release
 ```
 
-Requires **CMake 4.2+** and **Visual Studio 2022** (MSVC with C++20).
-See [docs/build.md](docs/build.md) for Debug build, clean-build procedure, and troubleshooting.
+Output: `build/Release/wperf.exe`
 
-## Download
+See [docs/build.md](docs/build.md) for Debug build steps, clean-build procedure, runtime dependency details, and troubleshooting.
 
-Pre-built releases are available on the [Releases](../../releases) page.
+## Configuration
+
+Settings are stored in `wperf.ini` in the same directory as `wperf.exe`. The file is created automatically on first run.
+
+`wperf` does not require administrator privileges. The memory purge feature may silently skip system-owned or otherwise protected processes when run as a standard user.
+
+If `wperf.exe` is placed in a write-protected directory such as `C:\Program Files\`, settings will not persist. Run from a user-writable location.
+
+## Known Limitations
+
+- Windows x64 only. x86 is not supported.
+- Windows 10 x64 support is documented but has not been independently tested. Windows 11 x64 is the verified platform.
+- GPU monitoring requires a DirectX 11-capable GPU with WDDM 2.0 or later drivers. GPU metrics are absent on unsupported hardware.
+- No installer. `wperf.exe` is distributed as a standalone executable.
+- No published release yet.
+- Settings file must be writable at the executable's location.
+
+## Roadmap
+
+A future on-demand **Lock Inspector** is planned to identify processes preventing files or directories from being modified or deleted. It will follow the same low-idle-overhead policy as the rest of the tool — activated on demand, no background polling while inactive.
+
+See [docs/roadmap.md](docs/roadmap.md) for the full development roadmap.
 
 ## Documentation
 
-See [`docs/`](docs/) for architecture baseline, platform support matrix, and release policy.
+| Document | Description |
+|----------|-------------|
+| [docs/build.md](docs/build.md) | Complete build instructions |
+| [docs/supported-platforms.md](docs/supported-platforms.md) | Supported platforms and toolchain details |
+| [docs/project-baseline.md](docs/project-baseline.md) | Technical repository baseline |
+| [docs/release-policy.md](docs/release-policy.md) | Versioning and release quality gates |
+| [docs/roadmap.md](docs/roadmap.md) | Development roadmap |
 
 ## License
 
