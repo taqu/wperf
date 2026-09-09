@@ -22,7 +22,9 @@ MAJOR.MINOR.PATCH
 
 ### Current Version Status
 
-No version constant, executable version resource, or `--version` support currently exists. This is a known gap to be addressed before the v0.1.0 release.
+The canonical source version is `0.1.0` in `CMakeLists.txt`. It generates the
+Windows version resource and CLI output (`wperf --version`); an optional
+`WPERF_VERSION_SUFFIX` supports RC builds such as `-rc1`.
 
 ### First Structured Release
 
@@ -120,8 +122,10 @@ The following criteria must be met before tagging a final release.
 | No known release-blocking test failures | Required before release |
 | Project-owned code builds cleanly at /W4 /WX /permissive- | Implemented (Phase 4) |
 | No known release-blocking issues | Pending |
-| Version constant present in source code | Planned |
-| Version resource embedded in executable (VERSIONINFO) | Planned |
+| Version constant present in source code | Implemented in CMake |
+| Version resource embedded in executable (VERSIONINFO) | Implemented |
+| `--version` matches canonical source | Implemented |
+| Package name/checksum match validated release version | Implemented in tag workflow |
 | Documentation updated and accurate | Complete for implemented features; visual tray validation remains manual |
 | Controlled process actions manually validated before release | Implemented (Phase 10; opt-in integration coverage) |
 | Release artifact validated on a clean Windows 10 or Windows 11 environment | Planned |
@@ -159,7 +163,8 @@ The Lock Inspector feature follows the core lightweight design policy:
 ## Release Process
 
 1. Confirm all quality gate items are met.
-2. Update version constant in source and version resource in `.rc`.
+2. Update the `project(... VERSION ...)` value in `CMakeLists.txt`; the version
+   header and `.rc` metadata are generated during configuration.
 3. Create a signed git tag: `v0.1.0`
 4. Push the tag to trigger the release workflow.
 5. CI builds/tests Release, creates `wperf-vX.Y.Z-windows-x64.zip`, and uploads

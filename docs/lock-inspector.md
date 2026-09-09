@@ -62,6 +62,7 @@ retry operation, and no destructive CLI command.
 
 ```powershell
 .\wperf.exe --help
+.\wperf.exe --version
 .\wperf.exe --lock "C:\project\output.dll"
 .\wperf.exe --lock "C:\作業 folder\output.dll" --json
 .\wperf.exe --lock "C:\project\build" --deep

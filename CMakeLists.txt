@@ -1,6 +1,17 @@
 cmake_minimum_required(VERSION 4.2.0)
 set(PROJECT_NAME wperf)
-project(${PROJECT_NAME} LANGUAGES CXX)
+project(${PROJECT_NAME} VERSION 0.1.0 LANGUAGES CXX)
+
+set(WPERF_VERSION_SUFFIX "" CACHE STRING "Optional semantic version prerelease suffix, for example -rc1")
+if(NOT WPERF_VERSION_SUFFIX MATCHES "^(-[0-9A-Za-z.-]+)?$")
+    message(FATAL_ERROR "WPERF_VERSION_SUFFIX must be empty or like -rc1")
+endif()
+set(WPERF_VERSION_STRING "${PROJECT_VERSION}${WPERF_VERSION_SUFFIX}")
+set(WPERF_FILE_VERSION_COMMAS "${PROJECT_VERSION_MAJOR},${PROJECT_VERSION_MINOR},${PROJECT_VERSION_PATCH},0")
+set(WPERF_FILE_VERSION_STRING "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}.${PROJECT_VERSION_PATCH}.0")
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated")
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/cmake/version_config.h.in
+    ${CMAKE_CURRENT_BINARY_DIR}/generated/version_config.h @ONLY)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -12,6 +23,7 @@ set(RESOURCE_DIR ${PROJECT_ROOT}/resource)
 
 include_directories(AFTER ${HEADER_DIR})
 include_directories(AFTER ${RESOURCE_DIR})
+include_directories(AFTER ${CMAKE_CURRENT_BINARY_DIR}/generated)
 
 add_compile_definitions(UNICODE _UNICODE WINVER=0x0601 _WIN32_WINNT=0x0601)
 

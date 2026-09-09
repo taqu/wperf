@@ -1,4 +1,5 @@
 #include "lock_cli.h"
+#include "version_config.h"
 
 namespace wperf::cli
 {
@@ -10,7 +11,8 @@ constexpr std::wstring_view Help =
     L"  --lock-ui [path]  Open the graphical Lock Inspector\n"
     L"  --json         Output the inspection result as JSON\n"
     L"  --deep         Add an on-demand native handle scan (may be partial)\n"
-    L"  --help         Show this help\n";
+    L"  --help         Show this help\n"
+    L"  --version      Show the wperf version and exit.\n";
 
 std::wstring Quote(std::wstring_view value)
 {
@@ -73,6 +75,10 @@ Options Parse(std::span<const std::wstring_view> arguments)
         options.mode = Mode::Help;
         return options;
     }
+    if(arguments.size() == 1 && arguments[0] == L"--version") {
+        options.mode = Mode::Version;
+        return options;
+    }
     if((arguments.size() == 1 || arguments.size() == 2) && arguments[0] == L"--lock-ui") {
         if(arguments.size() == 2 && (arguments[1].empty() || arguments[1].starts_with(L"--"))) {
             options.error = L"--lock-ui accepts an optional path.";
@@ -113,6 +119,7 @@ Output Run(const Options& options, Inspector inspect, Inspector deepInspect)
     if(options.mode == Mode::Desktop) return {};
     if(options.mode == Mode::LockUi) return {2, {}, L"The graphical Lock Inspector must be started by the application.\n"};
     if(options.mode == Mode::Help) return {0, std::wstring(Help), {}};
+    if(options.mode == Mode::Version) return {0, std::wstring(L"wperf ") + WPERF_VERSION_STRING + L"\n", {}};
     if(options.mode == Mode::Invalid) return {2, {}, options.error + L"\n"};
     const auto result = (options.deep ? deepInspect : inspect)(std::filesystem::path(options.path));
     const bool partial = result.status == LockInspectionStatus::PartialSuccess;

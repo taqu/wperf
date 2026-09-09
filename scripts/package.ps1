@@ -15,6 +15,12 @@ if (-not (Test-Path -LiteralPath $license)) { throw "LICENSE not found" }
 if ($Version -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$') {
     throw "Version must be a semantic version tag such as v0.1.0 or v0.1.0-rc1"
 }
+$projectFile = Get-Content -LiteralPath (Join-Path (Get-Location) "CMakeLists.txt") -Raw
+$sourceVersion = [regex]::Match($projectFile, 'project\(\s*(?:\$\{[^}]+\}|\w+)\s+VERSION\s+([0-9]+\.[0-9]+\.[0-9]+)').Groups[1].Value
+if ([string]::IsNullOrEmpty($sourceVersion)) { throw "Canonical project version was not found in CMakeLists.txt" }
+if (($Version -replace '^v', '') -notmatch "^$([regex]::Escape($sourceVersion))(?:-|$)") {
+    throw "Package version $Version does not match canonical source version $sourceVersion"
+}
 
 $output = [IO.Path]::GetFullPath($OutputDir)
 $stage = Join-Path $output "package"

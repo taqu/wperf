@@ -1,5 +1,6 @@
 #include <doctest/doctest.h>
 #include "lock_cli.h"
+#include "version_config.h"
 #include <array>
 using namespace wperf;
 using namespace wperf::cli;
@@ -16,6 +17,17 @@ TEST_CASE("CLI desktop and help do not inspect") {
     CHECK(Run(Args({}), Inspect).exitCode == 0);
     CHECK(Run(Args({L"--help"}), Inspect).out.find(L"--lock") != std::wstring::npos);
     CHECK(calls == 0);
+}
+TEST_CASE("CLI version is lightweight and stable") {
+    calls = 0;
+    const auto options = Args({L"--version"});
+    CHECK(options.mode == Mode::Version);
+    const auto output = Run(options, Inspect);
+    CHECK(output.exitCode == 0);
+    CHECK(output.out == std::wstring(L"wperf ") + WPERF_VERSION_STRING + L"\n");
+    CHECK(output.err.empty());
+    CHECK(calls == 0);
+    CHECK(Run(Args({L"--help"}), Inspect).out.find(L"--version") != std::wstring::npos);
 }
 TEST_CASE("CLI accepts wide paths and JSON in either order") {
     const auto options = Args({L"--lock", L"C:\\作業 folder\\file.txt", L"--json"});

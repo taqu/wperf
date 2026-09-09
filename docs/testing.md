@@ -197,6 +197,16 @@ for explicit deep inspection.
 UNC/SMB live access and full reparse/alias equivalence: **NOT VERIFIED**.
 GitHub-hosted CI: **NOT VERIFIED**.
 
+## Phase 16 RC validation
+
+An isolated Release build configured with `-DWPERF_VERSION_SUFFIX=-rc1` passed
+the mandatory CTest suite. The extracted executable reported `wperf 0.1.0-rc1`,
+with Windows metadata `FileVersion=0.1.0.0` and
+`ProductVersion=0.1.0-rc1`. Packaging produced
+`wperf-v0.1.0-rc1-windows-x64.zip` containing `wperf.exe` and `LICENSE`, plus
+a matching SHA-256 sidecar. Windows 10, clean-machine runtime, Defender scan,
+and hosted GitHub Actions execution remain **NOT VERIFIED**.
+
 ## Phase 11 tray validation
 
 The normal desktop build creates one `wperf` notification-area icon. Its menu

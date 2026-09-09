@@ -20,14 +20,31 @@ jobs:
         with:
           cmakeVersion: "~4.2.0"
 
+      - name: Resolve release version
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $tagMatch = [regex]::Match($tag, '^v([0-9]+\.[0-9]+\.[0-9]+)(-.*)?$')
+          if (-not $tagMatch.Success) { throw "Invalid release tag: $tag" }
+          $source = [regex]::Match((Get-Content CMakeLists.txt -Raw), 'project\(\s*(?:\$\{[^}]+\}|\w+)\s+VERSION\s+([0-9]+\.[0-9]+\.[0-9]+)').Groups[1].Value
+          if ($tagMatch.Groups[1].Value -ne $source) { throw "Tag base version $($tagMatch.Groups[1].Value) does not match source version $source" }
+          "WPERF_VERSION_SUFFIX=$($tagMatch.Groups[2].Value)" >> $env:GITHUB_ENV
+
       - name: Configure
-        run: cmake -S . -B build -A x64
+        run: cmake -S . -B build -A x64 -DWPERF_VERSION_SUFFIX="${{ env.WPERF_VERSION_SUFFIX }}"
 
       - name: Build
         run: cmake --build build --config Release --parallel
 
       - name: Test Release
         run: ctest --test-dir build -C Release --output-on-failure --no-tests=error
+
+      - name: Verify executable version
+        shell: pwsh
+        run: |
+          $expected = "wperf $($env:GITHUB_REF_NAME -replace '^v', '')"
+          $actual = (cmd /c "build\Release\wperf.exe --version").Trim()
+          if ($actual -ne $expected) { throw "Executable version '$actual' does not match '$expected'" }
 
       - name: Package Windows x64 release
         shell: pwsh
@@ -38,10 +55,11 @@ jobs:
         run: |
           $archive = "artifacts/wperf-${{ github.ref_name }}-windows-x64.zip"
           if (-not (Test-Path -LiteralPath $archive)) { throw "Package not found: $archive" }
-          $entries = tar -tf $archive
-          if (($entries -notcontains "wperf.exe") -or ($entries -notcontains "LICENSE")) {
-            throw "Package must contain wperf.exe and LICENSE"
-          }
+          $check = "package-check"
+          if (Test-Path -LiteralPath $check) { Remove-Item -LiteralPath $check -Recurse -Force }
+          Expand-Archive -LiteralPath $archive -DestinationPath $check
+          if (-not (Test-Path -LiteralPath "$check/wperf.exe") -or
+              -not (Test-Path -LiteralPath "$check/LICENSE")) { throw "Package must contain wperf.exe and LICENSE" }
 
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4
