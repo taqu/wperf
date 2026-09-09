@@ -1,890 +1,765 @@
-# wperf Release Roadmap
+# wperf v0.1.0 Roadmap
 
-## Phase 0 — 現状棚卸しとリリース基準の固定
+## Project Direction
 
-まずコードを触る前に、現在の状態を明文化します。
+`wperf` is a lightweight Windows desktop-resident performance monitor.
 
-確認対象は以下です。
+The project should preserve the following principle:
 
-* ビルド方法
-* 対応 Windows バージョン
-* コンパイラ / SDK 要件
-* CMake か Visual Studio Solution か
-* 外部依存
-* 実行時依存 DLL
-* 設定ファイル保存場所
-* 管理者権限の要否
-* 現在の機能一覧
-* known issues
-* ライセンス
-* バージョニング方式
+- Keep idle CPU and memory usage minimal.
+- Expensive functionality must run only on demand.
+- Do not introduce unnecessary background polling, persistent worker threads, or continuous process/handle scanning.
+- Lock Inspector should remain a focused utility, not evolve into a full Task Manager replacement.
 
-ここで最初の公開リリースを例えば、
+For v0.1.0, Explorer shell integration is intentionally omitted.
 
-```text
-v0.1.0
-```
+The Lock Inspector will be opened only from the existing wperf right-click menu.
 
-と定義します。
+The intended interaction is:
 
-また、
+    wperf tray icon
+        ↓ right click
 
-```text
-v0.1.0 = 現在の wperf + Lock Inspector + CI + Documentation
-```
+    Settings
+    Lock Inspector...
+    Purge Memory
+    ----------------
+    Exit
 
-のように、リリーススコープを固定します。
+    Lock Inspector...
+        ↓
+    GUI
+        ↓
+    Browse File / Browse Folder
+        ↓
+    Inspect / Deep Scan
+        ↓
+    optionally:
+        Close Normally
+        Force Terminate
 
-### Deliverables
-
-```text
-docs/
-  architecture.md
-  release-policy.md
-  supported-platforms.md
-```
-
-この Phase では機能追加をしません。
+No Explorer registry integration, shell verb, shell-extension DLL, or COM integration is planned for v0.1.0.
 
 ---
 
-# Phase 1 — ビルドの再現性確立
+# Foundation
 
-GitHub Actions を作る前に、
+## Phase 0 — Repository Audit and Release Baseline
 
-> クリーンな Windows 環境からコマンドだけでビルドできる
+Establish the current repository and release baseline.
 
-状態にします。
+Main work:
 
-例えば CMake なら、
+- repository structure audit,
+- current architecture documentation,
+- build requirements,
+- external/runtime dependencies,
+- supported platform baseline,
+- test/CI/release infrastructure audit,
+- v0.1.0 scope definition,
+- release policy.
 
-```powershell
-cmake -S . -B build -A x64
-cmake --build build --config Release
-```
+Main output:
 
-だけで生成できる状態です。
+    docs/project-baseline.md
+    docs/supported-platforms.md
+    docs/release-policy.md
 
-Visual Studio 固有の手作業や IDE 設定への依存を取り除きます。
-
-可能なら、
-
-```text
-build/
-dist/
-```
-
-をソースツリーから完全に分離します。
-
-### 検証
-
-クリーン clone から、
-
-```powershell
-git clone ...
-cd wperf
-cmake ...
-cmake --build ...
-```
-
-で成功すること。
-
-### Deliverables
-
-* reproducible build
-* `.gitignore`
-* dependency documentation
-* build instructions
+No functional changes.
 
 ---
 
-# Phase 2 — README の整備
+## Phase 1 — Reproducible Windows Build
 
-この段階で GitHub のトップページを完成させます。
+Establish a clean and reproducible Windows x64 build.
 
-README は最低限、
+Goals:
 
-```text
-# wperf
+- build from a clean checkout,
+- canonical Debug build,
+- canonical Release build,
+- no undocumented IDE-only steps,
+- predictable output paths,
+- documented runtime dependencies.
 
-Screenshot
+Main output:
 
-## Features
+    docs/build.md
 
-## Requirements
-
-## Installation
-
-## Usage
-
-## Lock Inspector
-
-## Building from Source
-
-## Configuration
-
-## License
-```
-
-くらいあれば十分です。
-
-今回のスクリーンショットも README のトップにかなり使いやすいです。
-
-機能一覧は例えば、
-
-```text
-- RAM usage
-- CPU usage
-- GPU monitoring
-- Disk I/O
-- Network I/O
-- Lightweight tray application
-- On-demand locked-file/process inspection
-```
-
-程度。
-
-特に、
-
-> wperf aims to keep its idle resource usage minimal.
-
-という設計方針を README に明記しておくと、今後の機能追加判断の基準にもなります。
+This build path becomes the source of truth for CI.
 
 ---
 
-# Phase 3 — 基本 CI
+## Phase 2 — README and User Documentation
 
-ここで GitHub Actions を導入します。
+Make the GitHub repository understandable to a new user.
 
-まずは PR / push ごとに、
+Goals:
 
-```text
-Checkout
-   ↓
-Configure
-   ↓
-Build Debug
-   ↓
-Build Release
-   ↓
-Tests
-```
+- improve `README.md`,
+- document current features,
+- document supported platforms,
+- document basic usage,
+- communicate the lightweight design policy,
+- link deeper technical documentation.
 
-です。
-
-例えば、
-
-```text
-.github/
-  workflows/
-    ci.yml
-```
-
-を作ります。
-
-対象は最初は Windows x64 のみでよいでしょう。
-
-```text
-windows-latest
-MSVC
-x64
-Debug
-Release
-```
-
-Windows 専用ツールなので、無理に Linux/macOS CI を追加する必要はありません。
-
-### CI failure policy
-
-最低でも、
-
-* compiler error
-* linker error
-* unit test failure
-
-ではマージ不可にします。
+Do not document planned features as already implemented.
 
 ---
 
-# Phase 4 — 静的検査と警告レベル強化
+## Phase 3 — Basic GitHub Actions CI
 
-CI が安定したら品質チェックを追加します。
+Add minimal Windows build CI.
 
-MSVC ならまず、
+Expected flow:
 
-```text
-/W4
-/permissive-
-```
+    Pull Request / Push
+        ↓
+    Checkout
+        ↓
+    Configure
+        ↓
+    Build Debug
+        ↓
+    Build Release
+        ↓
+    Verify artifacts
 
-あたりが候補です。
+Target:
 
-いきなり `/WX` にすると既存警告の整理が大仕事になる可能性があるので、
+    windows-latest
+    MSVC
+    x64
 
-```text
-Phase 4A
-/W4
-
-Phase 4B
-warning cleanup
-
-Phase 4C
-/WX
-```
-
-くらいに分けるのがおすすめです。
-
-必要なら、
-
-```text
-clang-format
-clang-tidy
-```
-
-も追加できます。
-
-ただし wperf が小規模なら、最初のリリースに clang-tidy を必須化する必要まではないでしょう。
+No release automation yet.
 
 ---
 
-# Phase 5 — テスト基盤
+## Phase 4 — Compiler Diagnostics and Static Quality
 
-パフォーマンスモニター本体は OS や GPU に依存するので、GUI を丸ごとテストしようとすると大変です。
+Establish a compiler-quality baseline.
 
-それより内部ロジックを分離します。
+Primary target:
 
-例えば、
+    /W4
+    /permissive-
 
-```text
-src/
-  monitoring/
-  lock_inspector/
-  platform/
-  ui/
-```
+Clean meaningful compiler warnings in project-owned code.
 
-として、
+Evaluate `/WX`, but enable it only if the build is stable enough.
 
-```text
-tests/
-  lock_inspector_tests.cpp
-  path_tests.cpp
-  formatting_tests.cpp
-```
+Static analysis may be added only if it provides clear value without excessive complexity.
 
-のようにします。
+Main output:
 
-特に Lock Inspector では、
-
-* path normalization
-* child-path判定
-* duplicate process removal
-* PID情報
-* error handling
-
-などを unit test できます。
-
-OS API 自体は integration test に分けます。
+    docs/code-quality.md
 
 ---
 
-# Phase 6 — Lock Inspector Core
+## Phase 5 — Test Infrastructure
 
-ここから新機能です。
+Establish reliable automated testing.
 
-まず GUI を作らず、
+Goals:
 
-```cpp
-LockInspector
-```
+- choose one test framework,
+- integrate tests with the canonical build,
+- run tests through CI,
+- add a small initial set of deterministic, high-value tests,
+- avoid hardware-dependent and timing-sensitive mandatory tests.
 
-という内部 API を作ります。
+Focus on project-owned logic such as:
 
-概念的には、
+- formatting,
+- configuration,
+- conversions,
+- path utilities,
+- error handling.
 
-```cpp
-struct LockingProcess {
-    DWORD pid;
-    std::wstring process_name;
-    std::vector<std::wstring> resources;
-};
+Main output:
 
-std::vector<LockingProcess>
-FindLockingProcesses(const std::filesystem::path& path);
-```
-
-程度。
-
-最初のバックエンドは Restart Manager。
-
-```text
-RmStartSession
-RmRegisterResources
-RmGetList
-RmEndSession
-```
-
-を使用します。
-
-### この Phase の完成条件
-
-CLIまたはテストコードから、
-
-```text
-C:\foo\bar.dll
-```
-
-を指定して locker PID を取得できること。
+    docs/testing.md
 
 ---
 
-# Phase 7 — Lock Inspector CLI
+# Lock Inspector
 
-GUIより先に CLI を入れます。
+## Phase 6 — Restart Manager Core
 
-例えば、
+Implement the first Lock Inspector backend using Windows Restart Manager.
 
-```powershell
-wperf.exe --lock "C:\project\build"
-```
+Architecture:
 
-出力：
-
-```text
-PID     Process
-8420    devenv.exe
-14324   cmake.exe
-```
-
-できれば、
-
-```powershell
-wperf.exe --lock "..." --json
-```
-
-も用意しておくとテストが非常に簡単になります。
-
-例えば、
-
-```json
-{
-  "path": "C:\\project\\build",
-  "processes": [
-    {
-      "pid": 8420,
-      "name": "devenv.exe"
-    }
-  ]
-}
-```
-
-CI で integration test を組みやすくなります。
-
----
-
-# Phase 8 — Deep Handle Scan
-
-Restart Manager で検出できないケースへの fallback を追加します。
-
-構成は、
-
-```text
-LockInspector
-   |
-   +-- RestartManagerBackend
-   |
-   +-- NativeHandleBackend
-```
-
-くらいにしておくとよいです。
-
-通常は、
-
-```text
-Restart Manager
-```
-
-のみ実行。
-
-必要な場合だけ、
-
-```text
-Deep Scan
-```
-
-します。
-
-ここでも wperf の低負荷ポリシーを明確に守ります。
-
-**常時スキャンは禁止**です。
-
----
-
-# Phase 9 — Lock Inspector GUI
-
-ここで初めて GUI を追加します。
-
-最小構成なら、
-
-```text
-Path:
-[........................] [Browse]
-
-Process          PID
-------------------------
-devenv.exe       8420
-cmake.exe        14324
-
-[Refresh] [Close Process]
-```
-
-程度。
-
-最初は高度な Process Explorer を目指しません。
-
-特に、
-
-* CPU使用率
-* メモリ使用量
-* スレッド一覧
-* DLL一覧
-
-などは追加しない方がよいです。
-
-機能が膨らんで Task Manager 化するのを防ぎます。
-
----
-
-# Phase 10 — プロセス終了操作
-
-安全な順に、
-
-```text
-Request Close
+    path
       ↓
-Wait
+    Lock Inspector Core
       ↓
-Refresh
-```
-
-を実装。
-
-必要なら別ボタンとして、
-
-```text
-Force Terminate
-```
-
-を追加します。
-
-Force Terminate は明示的な確認付きにします。
-
-例えば、
-
-```text
-Terminating this process may cause unsaved data to be lost.
-```
-
-程度。
-
-他プロセスの handle を直接閉じる `Close Handle` は、このリリースでは入れないことを推奨します。
-
----
-
-# Phase 11 — Tray Menu Integration
-
-現在の、
-
-```text
-Settings
-Purge Memory
-Exit
-```
-
-に、
-
-```text
-Settings
-Lock Inspector...
-Purge Memory
-----------------
-Exit
-```
-
-を追加。
-
-ただしクリックするまで、
-
-```text
-additional thread = 0
-additional polling = 0
-additional timer = 0
-```
-
-を維持します。
-
-ここは wperf の重要な acceptance criteria にしてよいです。
-
----
-
-# Phase 12 — Explorer Context Menu
-
-次に Explorer から直接呼べるようにします。
-
-例えば、
-
-```text
-Right click folder
-    ↓
-Find Locking Processes
-```
-
-から、
-
-```powershell
-wperf.exe --lock-ui "%1"
-```
-
-を起動。
-
-Explorer 内に常駐 DLL をロードする Shell Extension より、
-
-**shell verb → wperf.exe**
-
-を優先します。
-
-これなら Explorer の安定性にも影響しにくいです。
-
----
-
-# Phase 13 — UX / Error Handling
-
-この段階で異常系を潰します。
-
-例えば、
-
-```text
-Path does not exist
-Access denied
-Process exited during scan
-Protected process
-Administrator privileges required
-Restart Manager unavailable
-Native handle scan failed
-```
-
-など。
-
-プロセス一覧取得中に対象プロセスが終了するのは普通なので、
-
-```text
-ERROR_INVALID_PARAMETER
-ERROR_ACCESS_DENIED
-process disappeared
-```
-
-などを正常系に近いものとして扱える設計にしておきます。
-
----
-
-# Phase 14 — Security Review
-
-Lock Inspector はプロセス操作をするので、ここは独立 Phase にした方がいいです。
-
-確認対象：
-
-* privilege escalation
-* protected process
-* administrator boundary
-* PID reuse
-* path canonicalization
-* symlink/junction
-* TOCTOU
-* terminate confirmation
-* command line quoting
-
-特に Explorer integration の、
-
-```text
-"%1"
-```
-
-周辺は path quoting を必ず確認します。
-
----
-
-# Phase 15 — Documentation Complete
-
-ここで docs を完成させます。
-
-最終形として、
-
-```text
-README.md
-LICENSE
-CHANGELOG.md
-CONTRIBUTING.md
-
-docs/
-  architecture.md
-  build.md
-  lock-inspector.md
-  troubleshooting.md
-  release.md
-```
-
-程度。
-
-`lock-inspector.md` には、
-
-* 何が検出できるか
-* Restart Manager
-* Deep Scan
-* 管理者権限
-* Force Terminate
-* limitations
-
-を説明します。
-
----
-
-# Phase 16 — Release CI
-
-通常 CI と Release workflow を分けます。
-
-```text
-.github/workflows/
-  ci.yml
-  release.yml
-```
-
-Release workflow は、
-
-```text
-git tag v0.1.0
-    ↓
-GitHub Actions
-    ↓
-Release build
-    ↓
-Package
-    ↓
-SHA256
-    ↓
-GitHub Release
-```
-
-とします。
-
-成果物は例えば、
-
-```text
-wperf-v0.1.0-windows-x64.zip
-wperf-v0.1.0-windows-x64.zip.sha256
-```
-
-。
-
-ZIP の中身は、
-
-```text
-wperf.exe
-README.txt
-LICENSE
-```
-
-程度でよいでしょう。
-
----
-
-# Phase 17 — Version Information
-
-Windows アプリなので executable の version resource も設定しておきたいです。
-
-Explorer の Properties で、
-
-```text
-File version:
-0.1.0.0
-
-Product version:
-0.1.0
-```
-
-が見えるようにします。
-
-さらに、
-
-```powershell
-wperf.exe --version
-```
-
-で、
-
-```text
-wperf 0.1.0
-```
-
-を返すようにします。
-
-できれば build metadata として git commit も保持します。
-
-```text
-wperf 0.1.0
-commit: a17c84e
-```
-
----
-
-# Phase 18 — Release Candidate
-
-ここで、
-
-```text
-v0.1.0-rc1
-```
-
-を作ります。
-
-RC は実環境で、
-
-* Windows 10
-* Windows 11
-* clean machine
-* NVIDIA GPUあり
-* GPUなし
-* 標準ユーザー
-* Administrator
-* High DPI
-* multi-monitor
-
-あたりを確認。
-
-Lock Inspector は特に、
-
-```text
-Explorer
-Visual Studio
-VS Code
-cmd.exe
-PowerShell
-CMake/Ninja
-```
-
-などでフォルダを掴ませて検証するとよいです。
-
----
-
-# Phase 19 — GitHub Release
-
-RC の問題を修正した後、
-
-```text
-v0.1.0
-```
-
-タグを作成。
-
-GitHub Release の内容は、
-
-```text
-wperf v0.1.0
-
-Highlights
-
-- Lightweight desktop performance monitor
-- CPU / RAM / GPU / Disk / Network monitoring
-- New on-demand Lock Inspector
-- Explorer context-menu integration
-
-Downloads
-
-wperf-v0.1.0-windows-x64.zip
-
-Requirements
-
-Windows 10/11 x64
-```
-
-程度で十分です。
-
-CHANGELOG も、
-
-```markdown
-## [0.1.0] - 2026-xx-xx
-
-### Added
-- Lock Inspector
-- Explorer context menu
-- GitHub Actions CI
-- Automated release packaging
-
-### Changed
-- Improved build reproducibility
-
-### Fixed
-- ...
-```
-
-と同期させます。
-
----
-
-# Phase 20 — Post-release automation
-
-v0.1.0 の後は開発フローを固定します。
-
-```text
-feature branch
+    Restart Manager
       ↓
-Pull Request
-      ↓
-CI
-      ↓
-review
-      ↓
-main
-      ↓
-tag
-      ↓
-release.yml
-      ↓
-GitHub Release
-```
+    structured result
 
-Dependabot を使っている依存があるなら、この段階で追加してもいいでしょう。
+Goals:
+
+- inspect a file or directory,
+- return process PID/name,
+- structured errors,
+- no UI dependency,
+- no process control,
+- no background work.
+
+Relevant APIs:
+
+    RmStartSession
+    RmRegisterResources
+    RmGetList
+    RmEndSession
+
+No `RmShutdown` or `RmRestart`.
 
 ---
 
-## 全体像
+## Phase 7 — Lock Inspector CLI
 
-まとめると、この順番がかなり安定しています。
+Expose the core through a command-line interface.
 
-```text
-Foundation
-Phase 0   Release scope
-Phase 1   Reproducible build
-Phase 2   README
-Phase 3   CI
-Phase 4   Compiler/static checks
-Phase 5   Test infrastructure
+Example:
 
-Lock Inspector
-Phase 6   Core
-Phase 7   CLI
-Phase 8   Deep Scan
-Phase 9   GUI
-Phase 10  Process control
-Phase 11  Tray integration
-Phase 12  Explorer integration
-Phase 13  Error handling
-Phase 14  Security review
+    wperf.exe --lock "C:\project\build"
 
-Release preparation
-Phase 15  Documentation
-Phase 16  Release CI
-Phase 17  Versioning
-Phase 18  Release Candidate
-Phase 19  GitHub Release
-Phase 20  Post-release workflow
-```
+Machine-readable mode:
+
+    wperf.exe --lock "C:\project\build" --json
+
+Goals:
+
+- human-readable output,
+- JSON output,
+- stable exit codes,
+- Unicode paths,
+- short-lived execution,
+- avoid starting the normal desktop monitor in CLI mode.
+
+The CLI remains read-only.
+
+---
+
+## Phase 8 — Native Deep Scan
+
+Add an optional native handle-scan backend for cases Restart Manager cannot detect.
+
+Possible entry point:
+
+    wperf.exe --lock "C:\project\build" --deep
+
+Architecture:
+
+    Restart Manager
+        +
+    Native Handle Scan
+
+Main capabilities:
+
+- exact file matching,
+- directory descendant matching,
+- NT device path handling,
+- `\\?\` path normalization,
+- case-insensitive Windows path matching,
+- Unicode support,
+- inaccessible-process tolerance,
+- result merging and deduplication.
+
+Potential APIs include:
+
+    NtQuerySystemInformation
+    DuplicateHandle
+    GetFinalPathNameByHandleW
+
+Important rules:
+
+- one-shot scan only,
+- no continuous handle enumeration,
+- no remote handle closing,
+- no automatic elevation.
+
+---
+
+## Phase 9 — Lock Inspector GUI
+
+Add a small GUI frontend over the existing core.
+
+Core flow:
+
+    Path
+    [ Browse ]
+
+    [ Inspect ]
+    [ Deep Scan ]
+
+    Processes
+    PID / Process
+
+    Matching resources
+
+    [ Refresh ]
+    [ Close ]
+
+Goals:
+
+- file/folder selection,
+- normal inspection,
+- deep inspection,
+- manual refresh,
+- process/resource display,
+- partial-result indication.
+
+Important behavior:
+
+    automatic refresh = NO
+    periodic scan = NO
+
+The GUI should be created only on demand.
+
+---
+
+## Phase 10 — Safe Process Control
+
+Add explicit process-control actions to the GUI.
+
+Preferred flow:
+
+    detected process
+        ↓
+    Close Normally
+        ↓
+    bounded wait
+        ↓
+    Refresh
+        ↓
+    still present?
+        ↓
+    user may choose Force Terminate
+
+Actions:
+
+    Close Normally
+    Force Terminate
+
+Safety requirements:
+
+- Force Terminate requires confirmation.
+- Validate process identity before destructive action.
+- Account for PID reuse using process creation time or equivalent identity.
+- Use minimum process rights.
+- Block accidental self-termination.
+- No automatic elevation.
+- No bulk termination.
+
+Explicitly excluded:
+
+    Close Handle
+    DUPLICATE_CLOSE_SOURCE
+    Kill All
+    automatic UAC
+    SeDebugPrivilege escalation
+
+---
+
+## Phase 11 — Existing Right-Click Menu Integration
+
+Integrate Lock Inspector into the existing wperf right-click menu only.
+
+Final menu concept:
+
+    Settings
+    Lock Inspector...
+    Purge Memory
+    ----------------
+    Exit
+
+Selecting:
+
+    Lock Inspector...
+
+creates or focuses the existing Lock Inspector GUI.
+
+Recommended window policy:
+
+    one Lock Inspector window per wperf process
+
+If already open:
+
+    focus / restore existing window
+
+If closed:
+
+    release Lock Inspector-specific runtime state
+
+Required inactive behavior:
+
+    Lock Inspector window: 0
+    Lock Inspector workers: 0
+    Lock Inspector timers: 0
+    Lock Inspector polling: 0
+    automatic handle scans: 0
+
+Opening the right-click menu itself must not trigger inspection.
+
+---
+
+# Stabilization
+
+## Phase 12 — UX and Error Handling Hardening
+
+Stop feature expansion and harden the implementation.
+
+Standardize states such as:
+
+    success
+    no match
+    partial success
+    invalid input
+    access denied
+    backend failure
+    stale process identity
+
+Review and harden:
+
+- process exits during scan,
+- process exits before action,
+- PID reuse,
+- handle reuse,
+- file/directory disappearance,
+- path changes,
+- busy states,
+- stale GUI selection,
+- GUI close during scan,
+- application exit during scan,
+- CLI exit codes,
+- stdout/stderr behavior,
+- JSON error output,
+- cleanup on all failure paths.
+
+No new major features.
+
+---
+
+## Phase 13 — Security Review
+
+Perform a dedicated security review across the entire Lock Inspector implementation.
+
+### Native Handle Scanner
+
+Review:
+
+- `NtQuerySystemInformation`,
+- native structure sizing,
+- integer/buffer overflow,
+- `DuplicateHandle`,
+- minimum process rights,
+- remote handle safety,
+- handle races,
+- path resolution.
+
+### Process Control
+
+Review:
+
+- PID reuse,
+- creation-time validation,
+- stale identity,
+- self-target protection,
+- `WM_CLOSE`,
+- `TerminateProcess`,
+- protected processes,
+- minimum privileges.
+
+### Path Handling
+
+Review:
+
+- Unicode,
+- `\\?\`,
+- UNC,
+- junctions,
+- symlinks,
+- component-boundary matching,
+- TOCTOU conditions.
+
+Explicitly confirm:
+
+    PROCESS_ALL_ACCESS       not used unnecessarily
+    DUPLICATE_CLOSE_SOURCE   not used
+    SeDebugPrivilege         not automatically enabled
+    automatic UAC            not implemented
+    arbitrary remote handle closing not implemented
+
+---
+
+# Release Preparation
+
+## Phase 14 — Documentation Finalization
+
+Make all documentation release-ready.
+
+Expected documentation:
+
+    README.md
+    LICENSE
+    CHANGELOG.md
+    CONTRIBUTING.md
+
+    docs/
+      build.md
+      usage.md
+      testing.md
+      code-quality.md
+      lock-inspector.md
+      supported-platforms.md
+      project-baseline.md
+      release-policy.md
+
+If useful, add:
+
+    architecture.md
+
+The final Lock Inspector documentation should describe:
+
+    Opening:
+      wperf right-click menu
+        → Lock Inspector...
+
+    Detection:
+      Inspect
+      Deep Scan
+
+    Actions:
+      Close Normally
+      Force Terminate
+
+    Not provided:
+      Explorer integration
+      arbitrary handle closing
+      automatic elevation
+      automatic scanning
+
+---
+
+## Phase 15 — Release CI and Packaging
+
+Add a dedicated release workflow separate from normal CI.
+
+Expected flow:
+
+    version tag
+        ↓
+    Release build
+        ↓
+    tests
+        ↓
+    package
+        ↓
+    SHA-256
+        ↓
+    release artifact
+
+Expected artifacts:
+
+    wperf-v0.1.0-windows-x64.zip
+    wperf-v0.1.0-windows-x64.zip.sha256
+
+The ZIP should contain only required files, for example:
+
+    wperf.exe
+    LICENSE
+    README.txt
+
+plus any required runtime DLLs.
+
+---
+
+## Phase 16 — Versioning and Windows Metadata
+
+Establish one canonical project version.
+
+Initial release:
+
+    0.1.0
+
+Expose it through:
+
+### Windows executable metadata
+
+    File version:
+    0.1.0.0
+
+    Product version:
+    0.1.0
+
+### CLI
+
+    wperf.exe --version
+
+Expected:
+
+    wperf 0.1.0
+
+Optionally include build metadata such as:
+
+    commit: abc1234
+
+Keep all version sources synchronized.
+
+---
+
+## Phase 17 — Release Candidate
+
+Create:
+
+    v0.1.0-rc1
+
+using the real release packaging path.
+
+Validate on representative environments.
+
+Target validation areas include:
+
+    Windows 10 x64
+    Windows 11 x64
+    standard user
+    administrator
+    GPU available
+    GPU unavailable/unsupported
+    100% DPI
+    125% / 150% DPI
+
+Lock Inspector scenarios should include:
+
+    file lock
+    directory descendant lock
+    Unicode path
+    no-lock result
+    deep scan
+    process exit during scan
+    Close Normally
+    Force Terminate cancellation
+    Force Terminate
+    access denied
+    close GUI during scan
+    repeated open/close
+
+Also verify the existing right-click menu:
+
+    Settings
+    Lock Inspector...
+    Purge Memory
+    Exit
+
+---
+
+## Phase 18 — GitHub Release
+
+After RC validation and fixes, create:
+
+    v0.1.0
+
+Publish a GitHub Release.
+
+Expected highlights may include:
+
+    - Lightweight Windows performance monitor
+    - CPU / RAM / GPU / Disk / Network monitoring
+    - On-demand Lock Inspector
+    - Restart Manager-based fast inspection
+    - Optional native deep scan
+    - Safe process-close controls
+
+Publish:
+
+    wperf-v0.1.0-windows-x64.zip
+    SHA-256 checksum
+
+---
+
+## Phase 19 — Post-Release Workflow
+
+Standardize ongoing development.
+
+Recommended flow:
+
+    feature branch
+        ↓
+    Pull Request
+        ↓
+    CI
+        ↓
+    review
+        ↓
+    main
+        ↓
+    version tag
+        ↓
+    release workflow
+
+Optional repository improvements can be added here:
+
+- Dependabot,
+- issue templates,
+- pull request template,
+- maintenance/release documentation improvements.
+
+---
+
+# Final Roadmap Summary
+
+    Foundation
+    ------------------------------------------------
+    Phase 0   Repository Audit
+    Phase 1   Reproducible Build
+    Phase 2   README / Documentation
+    Phase 3   Basic CI
+    Phase 4   Compiler Quality
+    Phase 5   Test Infrastructure
+
+    Lock Inspector
+    ------------------------------------------------
+    Phase 6   Restart Manager Core
+    Phase 7   CLI
+    Phase 8   Native Deep Scan
+    Phase 9   GUI
+    Phase 10  Safe Process Control
+    Phase 11  Existing Right-Click Menu Integration
+
+    Stabilization
+    ------------------------------------------------
+    Phase 12  UX / Error Hardening
+    Phase 13  Security Review
+
+    Release
+    ------------------------------------------------
+    Phase 14  Documentation Finalization
+    Phase 15  Release CI / Packaging
+    Phase 16  Versioning
+    Phase 17  Release Candidate
+    Phase 18  GitHub Release
+    Phase 19  Post-Release Workflow
+
+# Explicitly Removed from v0.1.0
+
+The following are intentionally excluded:
+
+    Explorer file/folder context-menu integration
+    Explorer shell verbs
+    Explorer registry registration
+    Explorer COM extensions
+    IExplorerCommand
+    shell-extension DLLs
+    --install-explorer-menu
+    --uninstall-explorer-menu
+    Windows 11 first-level context-menu integration
+    persistent Explorer helper processes
+    arbitrary remote handle closing
+    DUPLICATE_CLOSE_SOURCE
+    automatic UAC elevation
+    automatic continuous lock scanning
+
+The v0.1.0 Lock Inspector remains a small, explicit, on-demand extension of the existing lightweight wperf application.

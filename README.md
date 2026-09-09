@@ -64,7 +64,7 @@ Run `wperf.exe`. The overlay appears on the desktop, positioned behind all other
 | Update interval (ms) | How often metrics refresh (250 – 60,000 ms, default 1,000) |
 | Always on top | Float above all windows instead of sitting behind them |
 
-The overlay has no system tray icon.
+The normal desktop build adds a `wperf` notification-area icon. Right-click the icon for Settings, Lock Inspector, Purge Memory, and Exit; left-click toggles the overlay.
 
 ## Building from Source
 
@@ -98,7 +98,7 @@ If `wperf.exe` is placed in a write-protected directory such as `C:\Program File
 
 ## Roadmap
 
-Open the on-demand **Lock Inspector GUI** with `wperf.exe --lock-ui [path]`. Select a process to request a normal close or explicitly confirm force termination (which may lose unsaved data). The CLI remains read-only: `wperf.exe --lock "C:\project\output.dll" [--deep] [--json]`. Normal scans use Windows Restart Manager; explicit deep scans add native handle discovery, including directory descendants. Unicode paths are supported, with no background scanning while idle or closed. Protected processes and path aliases limit coverage. See [usage and limitations](docs/lock-inspector.md).
+Open the on-demand **Lock Inspector GUI** from the tray menu (or with `wperf.exe --lock-ui [path]`). Select a process to request a normal close or explicitly confirm force termination (which may lose unsaved data). The CLI remains read-only: `wperf.exe --lock "C:\project\output.dll" [--deep] [--json]`. Normal scans use Windows Restart Manager; explicit deep scans add native handle discovery, including directory descendants. Unicode paths are supported, with no background scanning while idle or closed. Protected processes and path aliases limit coverage. See [usage and limitations](docs/lock-inspector.md).
 
 See [docs/roadmap.md](docs/roadmap.md) for the full development roadmap.
 

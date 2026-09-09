@@ -79,7 +79,7 @@ polling, or process scans. See [lock-inspector.md](lock-inspector.md).
 - Positioned at `HWND_BOTTOM` (behind all windows) or `HWND_TOPMOST` per user setting.
 - Updates suspended when window is minimized (`IsIconic` check).
 - Background process priority set at startup (`PROCESS_MODE_BACKGROUND_BEGIN`).
-- No system tray icon. Interaction via right-click context menu only.
+- A notification-area icon provides Settings, Lock Inspector, Purge Memory, and Exit; left-click toggles the overlay.
 - All fixed arrays stored in a single 4 KB virtual allocation slab (`VirtualAlloc`).
 
 ### Core Design Policy
@@ -156,7 +156,7 @@ Production dependencies remain Windows SDK libraries. Tests additionally use the
 | UI rendering | GDI (`CreateCompatibleDC`, `BitBlt`, `DrawTextW`, etc.) | Double-buffered; dark theme |
 | Fonts | Segoe UI 11pt and 14pt with ClearType | Requires Segoe UI font installed |
 | Settings storage | `GetPrivateProfileIntW` / `WritePrivateProfileStringW` | Writes `wperf.ini` next to executable |
-| Tray / notification area | Not used | No system tray icon |
+| Tray / notification area | `Shell_NotifyIconW` | Launcher menu only; no lock-state polling |
 | Memory purge | `EnumProcesses`, `EmptyWorkingSet` | On-demand; standard user; may silently fail on protected processes |
 | DPI awareness | `SetProcessDPIAware` | High DPI support |
 | Window management | Win32 `CreateWindowExW`, `TrackPopupMenu` | Standard |
@@ -191,8 +191,8 @@ Production dependencies remain Windows SDK libraries. Tests additionally use the
 | Always-on-top toggle | Confirmed |
 | On-demand memory purge | Confirmed |
 | Right-click context menu | Confirmed |
-| System tray icon | Not present |
-| Lock Inspector | Core, CLI, native deep scan, GUI, graceful close, and force termination implemented; Explorer integration absent |
+| System tray icon | Present; Lock Inspector launcher integrated |
+| Lock Inspector | Core, CLI, native deep scan, GUI, graceful close, force termination, and tray launch implemented; Explorer integration absent |
 
 ---
 

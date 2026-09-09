@@ -99,7 +99,8 @@ CTest writes its normal logs only inside the build directory.
 
 Live CPU/RAM/disk/network sampling, GPU enumeration and counters, desktop
 rendering, window positioning, settings persistence, startup/shutdown, and
-memory purge remain manual or future integration testing. There is no tray icon.
+memory purge remain manual or future integration testing. Tray launch behavior
+is covered by the Phase 11 smoke checklist below.
 Hardware tests are excluded from mandatory CI. Lock Inspector deep scanning,
 user interfaces, and broader OS/driver scenarios remain untested. No coverage
 percentage is claimed.
@@ -133,7 +134,7 @@ restored the standard MSVC flags. GitHub-hosted CI: **NOT VERIFIED**.
 
 A hidden no-argument Release startup smoke test found the normal wperf window
 and closed it through WM_CLOSE with exit code 0. Visual rendering and menu
-interaction were not manually verified. The app has no existing tray icon.
+interaction were not manually verified.
 
 ## Phase 8 native handle scan validation (2026-09-09)
 
@@ -192,6 +193,15 @@ now pass. There is still no hard driver-independent wall-clock guarantee; see
 
 Normal desktop startup/monitoring/settings/shutdown were not manually retested
 in Phase 8; the desktop startup path is unchanged and scanning is only dispatched
-for explicit deep inspection. The existing application has no tray icon.
+for explicit deep inspection.
 UNC/SMB live access and full reparse/alias equivalence: **NOT VERIFIED**.
 GitHub-hosted CI: **NOT VERIFIED**.
+
+## Phase 11 tray validation
+
+The normal desktop build creates one `wperf` notification-area icon. Its menu
+contains Settings, Lock Inspector..., Purge Memory, and Exit; opening the menu
+does not initialize or scan Lock Inspector. Lock Inspector is launched on its
+own UI thread, repeated selections focus the existing window, and tray Exit
+closes it before the monitor shuts down. Visual notification-area interaction
+and Explorer restart re-add behavior remain manual checks.

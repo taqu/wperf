@@ -238,7 +238,7 @@ While inactive: **0 handle enumerations, 0 process scans, 0 added threads,
 0 timers, 0 polling**. Normal inspection remains Restart Manager only. Deep
 inspection uses temporary state and one watchdog, releases local resources and
 returns; the CLI then exits. Normal desktop monitoring is intentionally unchanged;
-the existing app has no tray icon.
+the normal desktop app exposes Lock Inspector from the notification-area tray menu. The direct `--lock-ui` entry point remains available for automation and dedicated use.
 
 Process termination is available only through explicit, identity-validated GUI
 actions. Remote handle closing, `DUPLICATE_CLOSE_SOURCE`, Restart Manager

@@ -49,7 +49,7 @@ v0.1.0-rc2
 - Window position and update interval persistence
 - On-demand memory purge
 - Always-on-top mode
-- On-demand Lock Inspector: core, human/JSON CLI, explicit native deep scan, GUI, and explicit process control implemented (Phases 6-10); tray integration and Explorer integration pending
+- On-demand Lock Inspector: core, human/JSON CLI, explicit native deep scan, GUI, explicit process control, and tray launch implemented (Phases 6-11); Explorer integration pending
 - Reproducible Release build (CMake + MSVC)
 - Basic Windows CI (build verification)
 - Essential user documentation
@@ -136,7 +136,7 @@ remains the default; native scanning is explicit and on demand. Directory
 descendant matching is supported, with partial results for inaccessible
 processes/handles. The GUI is available through `wperf.exe --lock-ui [path]`.
 Process control is explicit, identity-validated, confirmation-gated for force
-termination, and manually validated with controlled processes. Tray integration
+termination, tray launch, and manually validated with controlled processes. Explorer integration
 and Explorer integration remain pending.
 Remote handle closing is absent. See [lock-inspector.md](lock-inspector.md).
 

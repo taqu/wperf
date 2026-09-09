@@ -8,6 +8,9 @@
 #include <commctrl.h>
 #include <cstdint>
 #include <dxgi.h>
+#include <shellapi.h>
+#include <atomic>
+#include <thread>
 #include <windows.h>
 #include "purge_memory.h"
 // Main window proc and helpers
@@ -29,6 +32,13 @@ namespace
     static constexpr int32_t MenuID_Settings = 1001;
     static constexpr int32_t MenuID_MemoryPurge = 1002;
     static constexpr int32_t MenuID_Exit = 1003;
+    static constexpr int32_t MenuID_LockInspector = 1004;
+    static constexpr UINT TrayCallbackMessage = WM_APP + 10;
+    static constexpr UINT TrayIconId = 1;
+    NOTIFYICONDATAW g_trayIcon{};
+    bool g_trayIconAdded = false;
+    std::atomic_bool g_lockUiRunning{false};
+    std::thread g_lockUiThread;
 
     static constexpr int32_t TimerID_PurgeMemory = 2;
 
@@ -137,6 +147,81 @@ namespace
     static constexpr int kDlgProgress = 2005;
     static constexpr wchar_t SettingsClassName[] = L"wperfSettings";
     static constexpr wchar_t MemoryPurgeClassName[] = L"wperfMemoryPurge";
+
+    HWND FindOwnLockInspector()
+    {
+        HWND candidate = nullptr;
+        const DWORD self = GetCurrentProcessId();
+        while((candidate = FindWindowExW(nullptr, candidate, L"wperfLockInspector", nullptr)) != nullptr) {
+            DWORD owner = 0;
+            GetWindowThreadProcessId(candidate, &owner);
+            if(owner == self)
+                return candidate;
+        }
+        return nullptr;
+    }
+
+    void OpenLockInspector()
+    {
+        HWND existing = FindOwnLockInspector();
+        if(existing) {
+            ShowWindow(existing, SW_RESTORE);
+            SetForegroundWindow(existing);
+            return;
+        }
+        if(g_lockUiRunning.exchange(true))
+            return;
+        if(g_lockUiThread.joinable())
+            g_lockUiThread.join();
+        g_lockUiThread = std::thread([] {
+            const int result = RunLockInspectorGui(GetModuleHandleW(nullptr), SW_SHOWNORMAL, {});
+            g_lockUiRunning.store(false);
+            if(result != 0)
+                MessageBoxW(nullptr, L"Unable to open Lock Inspector.", L"wperf", MB_ICONERROR | MB_OK);
+        });
+    }
+
+    void CloseLockInspector()
+    {
+        if(!g_lockUiRunning.load()) {
+            if(g_lockUiThread.joinable())
+                g_lockUiThread.join();
+            return;
+        }
+        for(int i = 0; i < 40 && !FindOwnLockInspector(); ++i)
+            Sleep(10);
+        if(HWND window = FindOwnLockInspector())
+            PostMessageW(window, WM_CLOSE, 0, 0);
+        if(g_lockUiThread.joinable())
+            g_lockUiThread.join();
+    }
+
+    void ShowTrayMenu(HWND hwnd)
+    {
+        HMENU menu = CreatePopupMenu();
+        if(!menu)
+            return;
+        AppendMenuW(menu, MF_STRING, MenuID_Settings, L"Settings");
+        AppendMenuW(menu, MF_STRING, MenuID_LockInspector, L"Lock Inspector...");
+        AppendMenuW(menu, MF_STRING, MenuID_MemoryPurge, L"Purge Memory");
+        AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+        AppendMenuW(menu, MF_STRING, MenuID_Exit, L"Exit");
+        POINT point{};
+        GetCursorPos(&point);
+        SetForegroundWindow(hwnd);
+        const int selection = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_LEFTALIGN | TPM_RIGHTBUTTON,
+                                             point.x, point.y, 0, hwnd, nullptr);
+        DestroyMenu(menu);
+        if(selection == MenuID_Settings)
+            ShowSettingsDialog(hwnd);
+        else if(selection == MenuID_LockInspector)
+            OpenLockInspector();
+        else if(selection == MenuID_MemoryPurge)
+            ShowMemoryPurgeDialog(hwnd);
+        else if(selection == MenuID_Exit)
+            DestroyWindow(hwnd);
+        PostMessageW(hwnd, WM_NULL, 0, 0);
+    }
 
     void LoadSettings(size_t length, const wchar_t* iniPath)
     {
@@ -692,28 +777,19 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 
     case WM_RBUTTONUP:
     case WM_NCRBUTTONUP: {
-        HMENU hMenu = CreatePopupMenu();
-        AppendMenuW(hMenu, MF_STRING, MenuID_Settings, L"Settings");
-        AppendMenuW(hMenu, MF_STRING, MenuID_MemoryPurge, L"Purge Memory");
-        AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
-        AppendMenuW(hMenu, MF_STRING, MenuID_Exit, L"Exit");
-
-        POINT pt;
-        GetCursorPos(&pt);
-
-        SetForegroundWindow(hwnd);
-        int32_t selection = TrackPopupMenu(hMenu, TPM_RETURNCMD | TPM_LEFTALIGN | TPM_RIGHTBUTTON, pt.x, pt.y, 0, hwnd, nullptr);
-        DestroyMenu(hMenu);
-
-        if(selection == MenuID_Settings) {
-            ShowSettingsDialog(hwnd);
-        } else if(selection == MenuID_MemoryPurge) {
-            ShowMemoryPurgeDialog(hwnd);
-        } else if(selection == MenuID_Exit) {
-            DestroyWindow(hwnd);
-        }
+        ShowTrayMenu(hwnd);
         return 0;
     }
+
+    case TrayCallbackMessage:
+        if(lParam == WM_RBUTTONUP)
+            ShowTrayMenu(hwnd);
+        else if(lParam == WM_LBUTTONUP || lParam == WM_LBUTTONDBLCLK) {
+            ShowWindow(hwnd, IsWindowVisible(hwnd) ? SW_HIDE : SW_SHOWNA);
+            if(IsWindowVisible(hwnd))
+                SetForegroundWindow(hwnd);
+        }
+        return 0;
 
     case WM_PAINT: {
         return OnPaintMain(hwnd, g_monitor);
@@ -724,6 +800,7 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 
     case WM_DESTROY: {
         KillTimer(hwnd, 1);
+        CloseLockInspector();
 
         // Save window coordinates into wperf.ini
         WINDOWPLACEMENT wp = {0};
