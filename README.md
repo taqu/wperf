@@ -18,7 +18,7 @@ A lightweight Windows desktop performance overlay. `wperf` sits at the bottom of
 - On-demand working-set memory purge
 - On-demand Lock Inspector with graphical and command-line interfaces, Restart Manager fast scan, and optional native deep scan
 - Explicit per-process Close Normally and confirmed Force Terminate actions in the Lock Inspector GUI
-- Right-click context menu: **Settings**, **Purge Memory**, **Exit**
+- Right-click/tray context menu: **Settings**, **Lock Inspector...**, **Purge Memory**, **Exit**
 
 ## Design Goals
 
@@ -54,6 +54,7 @@ Run `wperf.exe`. The overlay appears on the desktop, positioned behind all other
 | Action | Description |
 |--------|-------------|
 | Settings | Opens the Settings dialog |
+| Lock Inspector... | Opens the on-demand Lock Inspector |
 | Purge Memory | Trims the working set of all accessible processes on demand |
 | Exit | Closes the application |
 
@@ -96,19 +97,26 @@ If `wperf.exe` is placed in a write-protected directory such as `C:\Program File
 - No published release yet.
 - Settings file must be writable at the executable's location.
 
-## Roadmap
+## Lock Inspector
 
 Open the on-demand **Lock Inspector GUI** from the tray menu (or with `wperf.exe --lock-ui [path]`). Select a process to request a normal close or explicitly confirm force termination (which may lose unsaved data). The CLI remains read-only: `wperf.exe --lock "C:\project\output.dll" [--deep] [--json]`. Normal scans use Windows Restart Manager; explicit deep scans add native handle discovery, including directory descendants. Unicode paths are supported, with no background scanning while idle or closed. Protected processes and path aliases limit coverage. See [usage and limitations](docs/lock-inspector.md).
 
-See [docs/roadmap.md](docs/roadmap.md) for the full development roadmap.
+## Roadmap
+
+See [docs/roadmap.md](docs/roadmap.md) for future development plans.
 
 ## Documentation
 
 | Document | Description |
 |----------|-------------|
 | [docs/build.md](docs/build.md) | Complete build instructions |
+| [docs/usage.md](docs/usage.md) | General user guide |
 | [docs/testing.md](docs/testing.md) | Automated tests and remaining manual checks |
 | [docs/lock-inspector.md](docs/lock-inspector.md) | Lock Inspector GUI, CLI, API and limitations |
+| [docs/security.md](docs/security.md) | Privilege and destructive-action policy |
+| [docs/architecture.md](docs/architecture.md) | High-level component boundaries |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Development and pull request guidance |
+| [CHANGELOG.md](CHANGELOG.md) | User-facing change history |
 | [docs/supported-platforms.md](docs/supported-platforms.md) | Supported platforms and toolchain details |
 | [docs/project-baseline.md](docs/project-baseline.md) | Technical repository baseline |
 | [docs/release-policy.md](docs/release-policy.md) | Versioning and release quality gates |

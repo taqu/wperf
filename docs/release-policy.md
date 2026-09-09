@@ -120,7 +120,7 @@ The following criteria must be met before tagging a final release.
 | No known release-blocking issues | Pending |
 | Version constant present in source code | Planned |
 | Version resource embedded in executable (VERSIONINFO) | Planned |
-| Documentation updated and accurate | In progress |
+| Documentation updated and accurate | Complete for implemented features; visual tray validation remains manual |
 | Controlled process actions manually validated before release | Implemented (Phase 10; opt-in integration coverage) |
 | Release artifact validated on a clean Windows 10 or Windows 11 environment | Planned |
 | Release candidate tested before final tag | Planned |
@@ -130,14 +130,14 @@ The following criteria must be met before tagging a final release.
 
 ## Lock Inspector Policy
 
-Phases 6-10 implement the Restart Manager core, CLI, native
+Phases 6-11 implement the Restart Manager core, CLI, native
 fallback (`wperf.exe --lock <absolute-path> [--deep] [--json]`). Restart Manager
 remains the default; native scanning is explicit and on demand. Directory
 descendant matching is supported, with partial results for inaccessible
 processes/handles. The GUI is available through `wperf.exe --lock-ui [path]`.
 Process control is explicit, identity-validated, confirmation-gated for force
-termination, tray launch, and manually validated with controlled processes. Explorer integration
-and Explorer integration remain pending.
+termination, tray launch, and manually validated with controlled processes.
+Explorer integration remains pending.
 Remote handle closing is absent. See [lock-inspector.md](lock-inspector.md).
 
 The Lock Inspector feature follows the core lightweight design policy:

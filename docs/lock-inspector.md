@@ -34,8 +34,9 @@ to finish and discards its result. The worker then terminates and its handle is
 released. Closing an idle GUI exits immediately.
 
 The GUI does not close remote handles, modify the target, retry deletion, or
-request elevation. It is not integrated into the monitor menu, system tray, or
-Explorer.
+request elevation. In normal desktop mode it is available from the wperf
+notification-area menu; the direct `--lock-ui` entry point remains available.
+Explorer integration is not implemented.
 
 ## Process control
 
