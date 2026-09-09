@@ -4,6 +4,9 @@ Contributions should preserve wperf's small, event-driven runtime and Windows
 x64 scope. Start with the prerequisites and canonical commands in
 [docs/build.md](docs/build.md).
 
+Maintainer release procedures are in [docs/releasing.md](docs/releasing.md).
+Security reports should follow [SECURITY.md](SECURITY.md).
+
 ```powershell
 cmake -S . -B build -A x64
 cmake --build build --config Debug

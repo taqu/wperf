@@ -1,12 +1,12 @@
 # wperf Project Baseline
 
-Repository baseline. Last updated 2026-09-09 (Phase 8 native handle fallback).
+Repository baseline. Last updated 2026-09-10 (post-release workflow).
 
 ---
 
 ## Project Summary
 
-`wperf` is a lightweight Windows desktop performance overlay. It renders live system metrics (CPU, RAM, GPU, disk, network) as a borderless dark-themed window positioned at the bottom of the Z-order (behind all open windows). Configuration and memory purge are available via a right-click context menu.
+`wperf` is a lightweight Windows desktop performance overlay. It renders live system metrics (CPU, RAM, GPU, disk, network) as a borderless dark-themed window positioned at the bottom of the Z-order (behind all open windows). Configuration and memory purge are available via the tray/right-click context menu.
 
 The project is a single-executable Windows GUI application with no external runtime dependencies beyond the Windows SDK.
 
@@ -17,8 +17,10 @@ The project is a single-executable Windows GUI application with no external runt
 ```
 wperf/
 ├── .github/
+│   ├── dependabot.yml           # Monthly GitHub Actions update checks
+│   ├── pull_request_template.md
 │   └── workflows/
-│       └── release.yml          # GitHub Actions: build and upload on version tag push
+│       └── release.yml          # Build/package/upload on version tag push
 ├── .gitignore
 ├── _clang-format                # Chromium-based clang-format style configuration
 ├── CMakeLists.txt               # CMake build definition (minimum version 4.2.0)
@@ -271,7 +273,7 @@ license as a versioned ZIP, generates a SHA-256 sidecar, and uploads both.
 | Version resource in executable | Present; generated VERSIONINFO |
 | Version constant in source | Present in CMake |
 | `--version` CLI support | Present |
-| Git release tags | Needs verification |
+| Git release tags | `v0.1.0` exists remotely; current implementation tag alignment requires verification |
 | Release artifact naming convention | `wperf-vX.Y.Z-windows-x64.zip` |
 | Release checksums | SHA-256 `.sha256` sidecar |
 | Installer | Not present |
@@ -288,7 +290,7 @@ license as a versioned ZIP, generates a SHA-256 sidecar, and uploads both.
 | Architecture overview | Covered in this file |
 | Troubleshooting guide | Covered in `docs/build.md` |
 | Contribution workflow | Covered in `CONTRIBUTING.md` |
-| Windows API reference | Missing |
+| Windows API reference | Not required for current project size |
 | Lock Inspector design constraints | Covered in `wperf.md` |
 
 The current README covers features, settings, requirements, build instructions,

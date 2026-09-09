@@ -120,6 +120,7 @@ See [docs/roadmap.md](docs/roadmap.md) for future development plans.
 | [docs/supported-platforms.md](docs/supported-platforms.md) | Supported platforms and toolchain details |
 | [docs/project-baseline.md](docs/project-baseline.md) | Technical repository baseline |
 | [docs/release-policy.md](docs/release-policy.md) | Versioning and release quality gates |
+| [docs/releasing.md](docs/releasing.md) | Maintainer release procedure |
 | [docs/roadmap.md](docs/roadmap.md) | Development roadmap |
 
 ## License

@@ -171,3 +171,27 @@ The Lock Inspector feature follows the core lightweight design policy:
    it with its `.sha256` checksum to the GitHub Release.
 6. Validate the artifact on a clean machine before marking the release final.
 7. If a defect is found, create a patch release (`v0.1.1`) rather than overwriting the published artifact.
+
+## Post-release maintenance
+
+The primary branch is `main` and should remain buildable and testable. Normal
+work follows `feature/<name>`, `fix/<name>`, or `docs/<name>` branches through
+PR review and the Debug/Release CI gate; release packaging is not required for
+ordinary PRs.
+
+Patch releases (`0.1.x`) are for bug, security, compatibility, or packaging
+fixes. Meaningful new functionality uses the next minor version (`0.2.0` while
+pre-1.0). Keep the canonical CMake version as `0.1.0` until release work
+actually begins; do not automatically bump to `0.1.1`.
+
+Hotfixes require a focused branch, regression test, normal CI, and the same RC,
+tag, ZIP, checksum, and published-asset verification as any other release.
+Security-sensitive changes require focused review and rechecks of process
+identity, access rights, native bounds, and worker lifetime. Dependency updates
+are intentional, reviewed, and covered by CI; Dependabot checks GitHub Actions
+monthly without auto-merge.
+
+Repository release-state note: the configured remote currently contains a
+`v0.1.0` tag pointing to an older commit than this implementation. That tag and
+its provenance must not be moved or rewritten; alignment of a future release
+requires maintainer direction.
