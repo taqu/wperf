@@ -24,7 +24,7 @@ A lightweight Windows desktop performance overlay. `wperf` sits at the bottom of
 
 - Idle resource usage stays minimal. The overlay updates on a configurable timer and suspends rendering when minimized.
 - The process runs at background priority.
-- Expensive operations such as memory purge and the planned Lock Inspector are activated on demand and introduce no continuous background polling, threads, or handle scans while inactive.
+- Expensive operations such as memory purge and Lock Inspector are activated on demand and introduce no continuous background polling, threads, or handle scans while inactive.
 - `wperf` is not a Task Manager replacement.
 
 ## Requirements
@@ -96,7 +96,7 @@ If `wperf.exe` is placed in a write-protected directory such as `C:\Program File
 
 ## Roadmap
 
-The on-demand **Lock Inspector** core is implemented using Windows Restart Manager. Its user-facing interface is pending; it is not yet available from the overlay. The core adds no background polling while inactive. See [implementation status and limitations](docs/lock-inspector.md).
+The initial on-demand **Lock Inspector CLI** uses Windows Restart Manager: `wperf.exe --lock "C:\project\output.dll" [--json]`. It supports Unicode paths and adds no background polling while inactive. Detection has coverage limitations, especially for directories; no Lock Inspector GUI or process control is available. See [implementation status and limitations](docs/lock-inspector.md).
 
 See [docs/roadmap.md](docs/roadmap.md) for the full development roadmap.
 
@@ -106,7 +106,7 @@ See [docs/roadmap.md](docs/roadmap.md) for the full development roadmap.
 |----------|-------------|
 | [docs/build.md](docs/build.md) | Complete build instructions |
 | [docs/testing.md](docs/testing.md) | Automated tests and remaining manual checks |
-| [docs/lock-inspector.md](docs/lock-inspector.md) | Lock Inspector core API and limitations |
+| [docs/lock-inspector.md](docs/lock-inspector.md) | Lock Inspector CLI, API and limitations |
 | [docs/supported-platforms.md](docs/supported-platforms.md) | Supported platforms and toolchain details |
 | [docs/project-baseline.md](docs/project-baseline.md) | Technical repository baseline |
 | [docs/release-policy.md](docs/release-policy.md) | Versioning and release quality gates |

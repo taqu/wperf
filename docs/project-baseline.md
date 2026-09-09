@@ -1,6 +1,6 @@
 # wperf Project Baseline
 
-Repository baseline. Last updated 2026-09-09 (Phase 6 Lock Inspector core).
+Repository baseline. Last updated 2026-09-09 (Phase 7 Lock Inspector CLI).
 
 ---
 
@@ -67,7 +67,7 @@ CMake target `wperf_lock_inspector` compiles `src/lock_inspector.cpp`, links
 `src/lock_inspector_internal.h` contains the narrow backend test seam.
 
 Discovery uses Restart Manager sessions with RAII cleanup and bounded list
-retries. No application call site exists yet. There is no GUI, user CLI,
+retries. Phase 7 adds `wperf.exe --lock <absolute-path> [--json]` and `--help` through a small CLI frontend. There is no Lock Inspector GUI,
 Explorer integration, deep handle scan, process termination, or handle closing.
 Files and directories are accepted as absolute wide paths; directory discovery
 is limited and does not recurse. Inactive inspection adds zero threads, timers,
@@ -193,7 +193,7 @@ Production dependencies remain Windows SDK libraries. Tests additionally use the
 | On-demand memory purge | Confirmed |
 | Right-click context menu | Confirmed |
 | System tray icon | Not present |
-| Lock Inspector | Restart Manager discovery core implemented; user interface pending |
+| Lock Inspector | Restart Manager core and on-demand CLI implemented; human/JSON output; no process control |
 
 ---
 
@@ -218,7 +218,7 @@ maintain or integrate. CI previously performed build/artifact checks only.
 
 `tests/CMakeLists.txt` builds `wperf_tests` by default (`BUILD_TESTING=OFF` disables
 it). CTest registers `wperf.unit` with the `unit` label and a 30-second timeout.
-The 33 doctest cases include the original 18 formatting/settings/CPU cases and
+The 40 doctest cases include seven CLI cases, the original 18 formatting/settings/CPU cases and
 15 Lock Inspector cases covering validation, errors, conversion, deduplication,
 races, retries, and session cleanup. Small inline helpers extracted into
 `include/app_logic.h` are shared by production and tests.
@@ -229,14 +229,14 @@ ctest --test-dir build -C Release --output-on-failure --no-tests=error
 ```
 
 Phase 6 clean validation results and commands are recorded in [testing.md](testing.md).
-Mandatory unit tests use only in-memory inputs. The separate
+Mandatory unit tests use only in-memory inputs. Mandatory CLI contract tests launch the executable and check help, invalid usage and nonexistent-path errors with strict JSON parsing. The separate
 `wperf_lock_integration_tests` target has three controlled-resource cases and
 requires `WPERF_BUILD_INTEGRATION_TESTS=ON`. It carries the `integration` label
 and is excluded from default CI pending GitHub-runner verification.
 
 Major gaps: INI persistence/missing-key handling, executable path construction,
 UI interactions, live metrics and GPU hardware, startup/shutdown, and memory
-purge. Lock Inspector deep scanning and user-interface tests remain future work.
+purge. Lock Inspector deep scanning and GUI tests remain future work. CLI contract tests run by default; held/released-resource CLI tests are opt-in with the existing integration option.
 See [testing.md](testing.md) for exact validation commands and isolation details.
 
 ---

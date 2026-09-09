@@ -23,6 +23,7 @@ set(HEADERS
 
 set(SOURCES
     ${SOURCE_DIR}/main.cpp
+    ${SOURCE_DIR}/lock_cli_windows.cpp
     ${SOURCE_DIR}/resource_monitor.cpp
     ${SOURCE_DIR}/purge_memory.cpp
 )
@@ -46,8 +47,14 @@ target_include_directories(wperf_lock_inspector PUBLIC ${HEADER_DIR})
 target_compile_options(wperf_lock_inspector PRIVATE /W4 /WX /permissive- /utf-8)
 target_link_libraries(wperf_lock_inspector PRIVATE Rstrtmgr)
 
+add_library(wperf_lock_cli STATIC ${HEADER_DIR}/lock_cli.h ${SOURCE_DIR}/lock_cli.cpp)
+target_link_libraries(wperf_lock_cli PUBLIC wperf_lock_inspector)
+target_compile_options(wperf_lock_cli PRIVATE /W4 /WX /permissive- /utf-8)
+
 target_link_libraries(${PROJECT_NAME} PRIVATE
     wperf_lock_inspector
+    wperf_lock_cli
+    shell32
     gdi32
     iphlpapi
     comctl32

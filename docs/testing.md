@@ -106,3 +106,30 @@ percentage is claimed.
 To extend the suite, add named `TEST_CASE` blocks to `tests/test_app_logic.cpp`
 (or add another source to `wperf_tests`). Exercise observable production logic
 with explicit inputs; avoid live load assertions, sleeps, and Windows API mocks.
+
+## Phase 7 CLI validation (2026-09-09)
+
+Clean configuration: `cmake --fresh -S . -B build-phase7 -A x64 -DWPERF_BUILD_INTEGRATION_TESTS=ON`.
+Debug and Release builds passed with `/W4 /WX /permissive- /utf-8`.
+`ctest --test-dir build-phase7 -C Debug --output-on-failure --no-tests=error`
+and the equivalent Release command passed all four CTest entries: 40 unit
+cases (seven new CLI cases), CLI contract tests, CLI resource tests and the
+three existing core integration cases.
+
+`wperf.cli_contract` is included by default, so the existing CI workflow runs it
+in both configurations without workflow changes. `wperf.cli_resources` uses the
+existing `WPERF_BUILD_INTEGRATION_TESTS` option, alongside the core integration
+tests; real Restart Manager tests remain opt-in pending hosted-runner validation.
+The two CLI entries cover eight scenario groups, including strict JSON parsing,
+field types, held/released files, Unicode paths with spaces, output streams and
+bounded process lifetime. PowerShell (pwsh or Windows PowerShell) is required
+when tests are enabled. Production adds no JSON dependency.
+
+The development sandbox blocks Restart Manager session creation with Windows
+error 29. Both complete suites passed when rerun outside the sandbox. Initial
+sandbox CMake compiler detection also failed; a fresh outside-sandbox configure
+restored the standard MSVC flags. GitHub-hosted CI: **NOT VERIFIED**.
+
+A hidden no-argument Release startup smoke test found the normal wperf window
+and closed it through WM_CLOSE with exit code 0. Visual rendering and menu
+interaction were not manually verified. The app has no existing tray icon.

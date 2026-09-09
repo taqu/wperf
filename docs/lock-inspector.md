@@ -1,104 +1,117 @@
-# Lock Inspector core
+# Lock Inspector CLI
 
-Phase 6 provides synchronous, discovery-only inspection through Windows Restart
-Manager. It identifies processes associated with a resource that may prevent
-modification or deletion. The core is implemented, but there is no supported
-user-facing entry point yet: no GUI, CLI, or Explorer context menu.
+Phase 7 exposes the synchronous, discovery-only Windows Restart Manager core
+through an on-demand CLI. There is no Lock Inspector GUI or Explorer menu.
 
-## API
+## CLI usage
 
-`include/lock_inspector.h` declares the project-owned boundary:
-
-```cpp
-wperf::LockInspectionResult InspectLocks(const std::filesystem::path& path);
+```powershell
+.\wperf.exe --help
+.\wperf.exe --lock "C:\project\output.dll"
+.\wperf.exe --lock "C:\作業 folder\output.dll" --json
 ```
 
-Link the CMake target `wperf_lock_inspector`. Pass an existing absolute Windows
-path, preferably constructed from a wide string. Spaces and Unicode are
-preserved. Empty paths, embedded nulls, relative paths (including drive-relative
-paths), and detectable missing/malformed resources produce structured errors.
-The core checks attributes once, registers exactly the requested path, and does
-not canonicalize it, resolve junctions/symlinks, or enumerate descendants.
+Supply an existing absolute path. Relative paths are rejected by the core.
+`--json` may appear before or after `--lock <path>`. Duplicate flags, unknown
+arguments, empty/missing paths, and combining `--help` with other flags are
+invalid usage. No arguments starts the existing desktop monitor.
 
-The returned `processes` contain a PID, Restart Manager display name (possibly
-empty), and process start time in Windows FILETIME ticks. Results are sorted by
-PID and start time and deduplicated by that pair. Duplicate metadata prefers a
-nonempty name, then the lexically first name. Different start times preserve
-distinct identities even if a PID was reused. Results are a snapshot; processes
-may already have exited by the time the caller uses them.
+The executable retains the Windows GUI subsystem. CLI mode attaches to the
+parent console when available and never allocates a console window. Console
+text uses Unicode; redirected stdout/stderr use UTF-8 without a BOM. For shells
+that do not wait for GUI executables, explicitly wait: in interactive cmd.exe,
+use `start "" /wait wperf.exe --lock "C:\project\output.dll"`. In PowerShell,
+a pipeline such as `& .\wperf.exe --lock "C:\project\output.dll" --json | Out-String`
+waits for completion; inspect `$LASTEXITCODE`. Windows Terminal behavior follows
+its hosted shell. Scripts can also launch with redirected streams and wait for
+the process, as the integration tests do.
 
-## Status and errors
+## Output and exit codes
 
-Always check `status` before interpreting `processes`:
+Human output includes the target, PID and Restart Manager display name, or
+`(name unavailable)`. Both formats preserve the core's PID/start-time ordering.
+An empty successful list prints `No locking processes found.` and exits 0;
+it does not prove that deletion is possible.
 
-| Status | Meaning |
-|--------|---------|
-| `Success` | Inspection completed; the process list may be empty |
-| `InvalidPath` | Invalid input or a missing/malformed path detected during validation/registration |
-| `AccessDenied` | An identifiable access or privilege failure |
-| `DirectoryUnsupported` | Restart Manager rejected a directory with `ERROR_ACCESS_DENIED` at list retrieval |
-| `RestartManagerFailure` | Other backend failure, including retry exhaustion or allocation failure |
+| Code | Meaning |
+|------|---------|
+| 0 | Inspection completed, with any process count; or help displayed |
+| 1 | Inspection failed, or output could not be written |
+| 2 | Invalid command-line usage |
 
-`stage` identifies validation, session start, registration, list retrieval, or
-session cleanup; `nativeError` retains the Windows error code. Successful
-results use `None` and zero. Failures do not return partial process lists.
-`cleanupError` retains an `RmEndSession` failure separately, so it cannot hide an
-earlier error. If cleanup alone fails, status becomes a failure at `EndSession`.
-Allocation failures while collecting results map to `ERROR_OUTOFMEMORY`.
+Human successes/help go to stdout; human failures go to stderr. Parse errors
+always use human text on stderr and leave stdout empty, even with `--json`.
+JSON inspection results, including failures, go only to stdout:
 
-## Backend and resource policy
+```json
+{"path":"C:\\project\\output.dll","status":"success","processes":[{"pid":8420,"name":"Example application"}]}
+```
+
+`path` and `status` are strings. Success always has a `processes` array, possibly
+empty; each element has numeric `pid` and string `name` (possibly empty).
+Names are display names, not necessarily executable filenames.
+
+```json
+{"path":"C:\\missing.txt","status":"error","error":{"category":"invalid_path","native_code":2,"stage":"validate_path","cleanup_code":0}}
+```
+
+Error categories are `invalid_path`, `access_denied`, `directory_unsupported`,
+and `restart_manager_failure`. Stages are `none`, `validate_path`,
+`start_session`, `register_resource`, `get_list`, and `end_session`.
+`native_code` and `cleanup_code` are numeric Windows codes. Human errors retain
+this context with a readable category. JSON escapes quotes, backslashes, control
+characters and UTF-16 surrogate code units; other Unicode is emitted as UTF-8
+when redirected. No discovery diagnostics are mixed into JSON stdout.
+
+## API and architecture
+
+`include/lock_inspector.h` declares `InspectLocks(const std::filesystem::path&)`.
+The `wperf_lock_cli` library parses/formats; `wperf_lock_inspector` owns path
+validation, discovery, error mapping, sorting and deduplication. The Windows
+frontend uses `CommandLineToArgvW`, preserving wide paths without ANSI conversion.
+For valid inspection arguments it invokes the core exactly once, prints, and
+exits before common controls, windows, settings or monitoring initialization.
+The existing global monitor constructor is empty and performs no sampling.
+
+The core requires an existing absolute Windows path, rejects embedded nulls,
+and registers exactly one resource without resolving symlinks/junctions or
+scanning descendants. Records contain PID, display name and FILETIME start time;
+they are sorted/deduplicated by PID/start time. Duplicate metadata prefers a
+nonempty name, then the lexically first name. Start time is internal and is not
+part of the CLI JSON schema. Processes can exit after the snapshot.
 
 Each invocation uses `RmStartSession`, `RmRegisterResources`, `RmGetList`, and
 `RmEndSession`, linked from Windows SDK `Rstrtmgr.lib`. A noncopyable RAII owner
-calls `RmEndSession` for every successfully started session, including early
-failure and exception paths. Native cleanup failure is reported, not silently
-assumed to have succeeded.
+ends every started session, including exception paths. Cleanup failure is
+retained separately and becomes an inspection failure if it is the only error.
+The list loop allows one size query and three fill attempts; persistent churn
+returns `ERROR_MORE_DATA` and no partial list. Allocation failures in result
+collection map to `ERROR_OUTOFMEMORY`.
 
-The list loop allows one size query plus three fill attempts, resizing again
-when `ERROR_MORE_DATA` reports a changed count. It uses only the final returned
-count and discards partial records. Persistent churn returns a failure with
-`ERROR_MORE_DATA`. There are no sleeps or application-level infinite retries;
-individual synchronous Windows API calls can still take time.
+## Limitations and resource policy
 
-The core never opens a process or modifies the target. It does not shut down,
-restart, terminate, or close handles in another process. Restart Manager does
-its own session bookkeeping; inspection is read-only with respect to the target
-and associated applications.
+Restart Manager is the only backend and cannot detect every kind of lock.
+Directories are accepted without recursion, but Restart Manager can reject them
+at list retrieval with access denied, exposed as `directory_unsupported`.
+Descendant-file locks are not searched. See the
+[RmGetList contract](https://learn.microsoft.com/en-us/windows/win32/api/restartmanager/nf-restartmanager-rmgetlist).
+An empty list is not proof that a resource is unlocked.
 
-Inactive resource additions: **0 threads, 0 timers, 0 polling, 0 process scans,
-0 handle enumeration**. There is no global session or cross-call process cache.
-The overlay does not invoke this API yet; existing monitoring behavior is unchanged.
-
-## Limitations
-
-An empty successful result is not proof that a file can be deleted. Restart
-Manager does not detect every kind of lock. Directory input is accepted and
-registered without recursion, but Windows documents `ERROR_ACCESS_DENIED` when
-`RmGetList` encounters a registered directory. The core exposes this as
-`DirectoryUnsupported`, not as an empty successful result. Descendant-file locks
-are not searched. See [Microsoft's RmGetList contract](https://learn.microsoft.com/en-us/windows/win32/api/restartmanager/nf-restartmanager-rmgetlist).
-
-The names come directly from Restart Manager; no executable-path enrichment or
-permission-sensitive process opening is attempted. See [RM_PROCESS_INFO](https://learn.microsoft.com/en-us/windows/win32/api/restartmanager/ns-restartmanager-rm_process_info).
-
-Deep native handle scanning, GUI, Explorer integration, process termination,
-handle closing, and retry-delete are not implemented. Broader path handling and
-fallback discovery belong to later phases.
+There is no deep native handle scanning, Lock Inspector GUI, Explorer integration,
+process termination, arbitrary handle closing, privilege elevation or retry-delete.
+The command never opens or alters another process. Inactive additions are
+**0 threads, 0 timers, 0 polling, 0 process scans**. No persistent inspection
+session/cache exists. Normal desktop behavior is unchanged; the existing app
+has no tray icon.
 
 ## Validation
 
-Deterministic unit tests cover input validation, error context, conversion,
-sorting/deduplication, list growth/shrinkage, bounded retries, and cleanup on
-success, failure, and exceptions. A private per-call table replaces only the
-attribute query and four Restart Manager calls in these tests.
-
-Three opt-in integration cases exercise actual Windows APIs on temporary
-resources owned by the test. They check a held Unicode filename containing
-spaces, the test process's PID/name/start time, an empty list after closing its
-handle, invalid/missing paths, and the directory limitation. The tests remove
-their own files and directory without recursive deletion or process orchestration.
-They require no administrator privileges, but Restart Manager session bookkeeping
-must be permitted (the development sandbox blocks it with `ERROR_WRITE_FAULT`).
-
-See [testing.md](testing.md) for commands and verification results. These tests
-are opt-in until their reliability on GitHub-hosted Windows runners is verified.
+Seven CLI unit cases cover parsing, conflicts, one-call dispatch, exit codes,
+empty results, shared core ordering, names, structured errors and JSON escaping.
+Two process-level CTest entries cover eight scenario groups: help, invalid usage,
+missing-path human/JSON, and held/released-file human/JSON. PowerShell parses JSON
+and verifies field types and Unicode round trips. Each child must exit within
+20 seconds. Tests use their own temporary resources and require no arbitrary
+running applications. The contract entry runs in mandatory CI; real Restart
+Manager resource tests remain opt-in pending hosted-runner verification.
+See [testing.md](testing.md) for commands and validation results.

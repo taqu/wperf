@@ -1,4 +1,5 @@
 #include "app_logic.h"
+#include "lock_cli.h"
 #include "resource.h"
 #include "resource_monitor.h"
 #include <algorithm>
@@ -543,6 +544,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     using namespace wperf;
     UNREFERENCED_PARAMETER(hPrevInstance);
     UNREFERENCED_PARAMETER(lpCmdLine);
+
+    const int cliExitCode = cli::DispatchCommandLine();
+    if(cliExitCode >= 0) return cliExitCode;
 
     // Enable modern visual styling
     InitCommonControls();
