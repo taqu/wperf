@@ -5,8 +5,9 @@ namespace wperf::cli
 namespace
 {
 constexpr std::wstring_view Help =
-    L"Usage:\n  wperf.exe\n  wperf.exe --lock <absolute-path> [--deep] [--json]\n\n"
+    L"Usage:\n  wperf.exe\n  wperf.exe --lock-ui [path]\n  wperf.exe --lock <absolute-path> [--deep] [--json]\n\n"
     L"Options:\n  --lock <path>  Inspect a file or directory using Restart Manager\n"
+    L"  --lock-ui [path]  Open the graphical Lock Inspector\n"
     L"  --json         Output the inspection result as JSON\n"
     L"  --deep         Add an on-demand native handle scan (may be partial)\n"
     L"  --help         Show this help\n";
@@ -72,6 +73,15 @@ Options Parse(std::span<const std::wstring_view> arguments)
         options.mode = Mode::Help;
         return options;
     }
+    if((arguments.size() == 1 || arguments.size() == 2) && arguments[0] == L"--lock-ui") {
+        if(arguments.size() == 2 && (arguments[1].empty() || arguments[1].starts_with(L"--"))) {
+            options.error = L"--lock-ui accepts an optional path.";
+            return options;
+        }
+        options.mode = Mode::LockUi;
+        if(arguments.size() == 2) options.path = arguments[1];
+        return options;
+    }
     bool lock = false;
     for(size_t i = 0; i < arguments.size(); ++i) {
         if(arguments[i] == L"--lock" && !lock) {
@@ -101,6 +111,7 @@ LockInspectionResult InspectDeep(const std::filesystem::path& path)
 Output Run(const Options& options, Inspector inspect, Inspector deepInspect)
 {
     if(options.mode == Mode::Desktop) return {};
+    if(options.mode == Mode::LockUi) return {2, {}, L"The graphical Lock Inspector must be started by the application.\n"};
     if(options.mode == Mode::Help) return {0, std::wstring(Help), {}};
     if(options.mode == Mode::Invalid) return {2, {}, options.error + L"\n"};
     const auto result = (options.deep ? deepInspect : inspect)(std::filesystem::path(options.path));

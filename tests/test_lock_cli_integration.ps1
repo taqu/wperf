@@ -31,7 +31,8 @@ if (-not $Resources) {
     $result = Run-Cli "--lock `"$missing`" --json"
     $json = ConvertFrom-Json -InputObject $result.Out
     Check ($result.Code -eq 1 -and $result.Err -eq '' -and $json.path -ceq $missing -and $json.path -is [string]) 'missing path JSON'
-    Check ($json.status -eq 'error' -and $json.error.category -eq 'invalid_path' -and $json.error.native_code -is [int]) 'structured error'
+    $nativeCodeIsInteger = $json.error.native_code -is [int] -or $json.error.native_code -is [long]
+    Check ($json.status -eq 'error' -and $json.error.category -eq 'invalid_path' -and $nativeCodeIsInteger) 'structured error'
     $result = Run-Cli "--lock `"$missing`""
     Check ($result.Code -eq 1 -and $result.Out -eq '' -and $result.Err.Contains('invalid path')) 'human error'
     Write-Output 'CLI contract cases passed (help, invalid arguments, missing JSON, missing human).'

@@ -1,9 +1,10 @@
 add_library(wperf_doctest INTERFACE)
 target_include_directories(wperf_doctest SYSTEM INTERFACE third_party)
 
-add_executable(wperf_tests test_app_logic.cpp test_lock_inspector.cpp test_lock_cli.cpp test_native_handles.cpp)
+add_executable(wperf_tests test_app_logic.cpp test_lock_inspector.cpp test_lock_cli.cpp test_native_handles.cpp
+    test_lock_gui_presenter.cpp)
 target_include_directories(wperf_tests PRIVATE ${SOURCE_DIR})
-target_link_libraries(wperf_tests PRIVATE wperf_doctest wperf_lock_cli)
+target_link_libraries(wperf_tests PRIVATE wperf_doctest wperf_lock_cli wperf_lock_gui_presenter)
 target_compile_options(wperf_tests PRIVATE /W4 /WX /permissive- /utf-8)
 
 add_test(NAME wperf.unit COMMAND wperf_tests --no-colors)

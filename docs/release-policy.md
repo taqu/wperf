@@ -49,7 +49,7 @@ v0.1.0-rc2
 - Window position and update interval persistence
 - On-demand memory purge
 - Always-on-top mode
-- On-demand Lock Inspector: Restart Manager core, human/JSON CLI and explicit native --deep fallback implemented (Phases 6-8); GUI pending
+- On-demand Lock Inspector: core, human/JSON CLI, explicit native deep scan, and GUI implemented (Phases 6-9); process control, tray integration, and Explorer integration pending
 - Reproducible Release build (CMake + MSVC)
 - Basic Windows CI (build verification)
 - Essential user documentation
@@ -129,12 +129,13 @@ The following criteria must be met before tagging a final release.
 
 ## Lock Inspector Policy
 
-Phases 6-8 implement the discovery-only Restart Manager core, CLI and native
+Phases 6-9 implement the discovery-only Restart Manager core, CLI, native
 fallback (`wperf.exe --lock <absolute-path> [--deep] [--json]`). Restart Manager
 remains the default; native scanning is explicit and on demand. Directory
 descendant matching is supported, with partial results for inaccessible
-processes/handles. Lock Inspector GUI, process control and Explorer integration
-remain pending. Remote handle closing is absent. See [lock-inspector.md](lock-inspector.md).
+processes/handles. The GUI is available through `wperf.exe --lock-ui [path]`.
+Process control, tray integration, and Explorer integration remain pending.
+Remote handle closing is absent. See [lock-inspector.md](lock-inspector.md).
 
 The Lock Inspector feature follows the core lightweight design policy:
 

@@ -16,6 +16,7 @@ A lightweight Windows desktop performance overlay. `wperf` sits at the bottom of
 - Configurable update interval (250 – 60,000 ms)
 - Always-on-top mode
 - On-demand working-set memory purge
+- On-demand Lock Inspector with graphical and command-line interfaces, Restart Manager fast scan, and optional native deep scan
 - Right-click context menu: **Settings**, **Purge Memory**, **Exit**
 
 ## Design Goals
@@ -96,7 +97,7 @@ If `wperf.exe` is placed in a write-protected directory such as `C:\Program File
 
 ## Roadmap
 
-The initial on-demand **Lock Inspector CLI** uses Windows Restart Manager: `wperf.exe --lock "C:\project\output.dll" [--deep] [--json]`. Optional `--deep` adds native handle discovery, including directory descendants. Unicode paths are supported, with no background scanning while inactive. Protected processes and path aliases limit coverage; no Lock Inspector GUI or process control is available. See [implementation status and limitations](docs/lock-inspector.md).
+Open the on-demand **Lock Inspector GUI** with `wperf.exe --lock-ui [path]`. The CLI remains available as `wperf.exe --lock "C:\project\output.dll" [--deep] [--json]`. Normal scans use Windows Restart Manager; explicit deep scans add native handle discovery, including directory descendants. Unicode paths are supported, with no background scanning while idle or closed. Protected processes and path aliases limit coverage, and process control is not implemented. See [usage and limitations](docs/lock-inspector.md).
 
 See [docs/roadmap.md](docs/roadmap.md) for the full development roadmap.
 
@@ -106,7 +107,7 @@ See [docs/roadmap.md](docs/roadmap.md) for the full development roadmap.
 |----------|-------------|
 | [docs/build.md](docs/build.md) | Complete build instructions |
 | [docs/testing.md](docs/testing.md) | Automated tests and remaining manual checks |
-| [docs/lock-inspector.md](docs/lock-inspector.md) | Lock Inspector CLI, API and limitations |
+| [docs/lock-inspector.md](docs/lock-inspector.md) | Lock Inspector GUI, CLI, API and limitations |
 | [docs/supported-platforms.md](docs/supported-platforms.md) | Supported platforms and toolchain details |
 | [docs/project-baseline.md](docs/project-baseline.md) | Technical repository baseline |
 | [docs/release-policy.md](docs/release-policy.md) | Versioning and release quality gates |

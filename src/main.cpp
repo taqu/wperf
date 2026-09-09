@@ -1,5 +1,6 @@
 #include "app_logic.h"
 #include "lock_cli.h"
+#include "lock_gui.h"
 #include "resource.h"
 #include "resource_monitor.h"
 #include <algorithm>
@@ -545,8 +546,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     UNREFERENCED_PARAMETER(hPrevInstance);
     UNREFERENCED_PARAMETER(lpCmdLine);
 
-    const int cliExitCode = cli::DispatchCommandLine();
+    cli::Options startupOptions;
+    const int cliExitCode = cli::DispatchCommandLine(&startupOptions);
     if(cliExitCode >= 0) return cliExitCode;
+    if(startupOptions.mode == cli::Mode::LockUi)
+        return RunLockInspectorGui(hInstance, nCmdShow, startupOptions.path);
 
     // Enable modern visual styling
     InitCommonControls();

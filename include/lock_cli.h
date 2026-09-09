@@ -6,7 +6,7 @@
 
 namespace wperf::cli
 {
-enum class Mode { Desktop, Help, Inspect, Invalid };
+enum class Mode { Desktop, Help, Inspect, LockUi, Invalid };
 struct Options
 {
     Mode mode = Mode::Desktop;
@@ -26,7 +26,8 @@ Options Parse(std::span<const std::wstring_view> arguments);
 using Inspector = LockInspectionResult (*)(const std::filesystem::path&);
 LockInspectionResult InspectDeep(const std::filesystem::path& path);
 Output Run(const Options& options, Inspector inspect = InspectLocks, Inspector deepInspect = InspectDeep);
-// Returns -1 for ordinary desktop startup; otherwise the command's exit code.
-int DispatchCommandLine();
+// Returns -1 for a GUI startup mode; otherwise the command's exit code. When
+// supplied, guiOptions receives Desktop or LockUi startup details.
+int DispatchCommandLine(Options* guiOptions = nullptr);
 }
 #endif

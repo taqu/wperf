@@ -1,9 +1,41 @@
-# Lock Inspector CLI
+# Lock Inspector
 
 Lock Inspector is read-only, on-demand discovery. Restart Manager is the default
 low-cost backend. Phase 8 adds an explicit native handle scan for additional
-coverage, including handles to a directory and files beneath it. There is no
-Lock Inspector GUI or Explorer integration.
+coverage, including handles to a directory and files beneath it. Phase 9 adds a
+small native Win32 frontend over the same API. Explorer integration and process
+control are not implemented.
+
+## GUI usage
+
+```powershell
+.\wperf.exe --lock-ui
+.\wperf.exe --lock-ui "C:\project\build"
+```
+
+The optional path populates the editable path field but does not scan
+automatically. **Browse File** and **Browse Folder** use the Windows picker.
+**Inspect** runs the normal Restart Manager scan, while **Deep Scan** explicitly
+adds the native system-handle scan and may take longer. **Refresh** repeats the
+most recently requested mode; before the first scan it uses normal mode.
+
+Results use one row per process/resource so all matching resources from a deep
+directory scan remain visible. Restart Manager-only rows may have a blank
+Resource column because that backend does not provide a matching path. Empty
+success says `No locking processes found.` and partial results display a single
+non-modal permissions/limits notice. Backend failures retain a concise Windows
+error code in the status line.
+
+Each scan uses one temporary worker so the window remains responsive and scan
+buttons are disabled until it finishes. There is no automatic refresh, timer,
+polling, or scan while the window is idle. Closing during a scan destroys the
+window immediately; the dedicated UI entry waits safely for the bounded worker
+to finish and discards its result. The worker then terminates and its handle is
+released. Closing an idle GUI exits immediately.
+
+The GUI is discovery-only: it cannot terminate a process, close a remote handle,
+modify the target, retry deletion, or request elevation. It is not integrated
+into the monitor menu, system tray, or Explorer.
 
 ## CLI usage
 
@@ -189,7 +221,7 @@ returns; the CLI then exits. Normal desktop monitoring is intentionally unchange
 the existing app has no tray icon.
 
 No process termination, remote handle closing, `DUPLICATE_CLOSE_SOURCE`, shutdown,
-GUI, Explorer integration, elevation, retry-delete or release packaging is added.
+Explorer integration, elevation, retry-delete or release packaging is added.
 Discovery may temporarily open metadata handles but never changes another
 process's handle table or file contents.
 

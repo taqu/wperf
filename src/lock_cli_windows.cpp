@@ -40,7 +40,7 @@ bool Write(HANDLE handle, std::wstring_view value)
 }
 }
 
-int DispatchCommandLine()
+int DispatchCommandLine(Options* guiOptions)
 {
     int argc = 0;
     auto argv = CommandLineToArgvW(GetCommandLineW(), &argc);
@@ -50,7 +50,10 @@ int DispatchCommandLine()
     std::vector<std::wstring_view> arguments;
     for(int i = 1; i < argc; ++i) arguments.emplace_back(argv[i]);
     const auto options = Parse(arguments);
-    if(options.mode == Mode::Desktop) return -1;
+    if(options.mode == Mode::Desktop || options.mode == Mode::LockUi) {
+        if(guiOptions) *guiOptions = options;
+        return -1;
+    }
 
     // Capture inherited redirects before AttachConsole replaces standard handles.
     HANDLE out = GetStdHandle(STD_OUTPUT_HANDLE);
