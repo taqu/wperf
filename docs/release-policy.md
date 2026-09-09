@@ -1,6 +1,8 @@
 # wperf Release Policy
 
-Initial release policy for `wperf`. Defined in Phase 0 as a planning baseline. Implementation of CI, packaging, and release infrastructure is deferred to later phases.
+Release policy for `wperf` v0.1.0. The tag workflow builds, tests, packages,
+and publishes the Windows x64 artifact; final release validation and version
+metadata remain separate gates.
 
 ---
 
@@ -79,7 +81,7 @@ v0.1.0-rc2
 wperf-v0.1.0-windows-x64.zip
 ```
 
-The exact format may be refined when packaging is implemented.
+The tag workflow produces this format directly.
 
 ### Archive Contents (minimum)
 
@@ -124,7 +126,7 @@ The following criteria must be met before tagging a final release.
 | Controlled process actions manually validated before release | Implemented (Phase 10; opt-in integration coverage) |
 | Release artifact validated on a clean Windows 10 or Windows 11 environment | Planned |
 | Release candidate tested before final tag | Planned |
-| SHA-256 checksum generated and attached to GitHub Release | Planned |
+| SHA-256 checksum generated and attached to GitHub Release | Implemented in tag workflow |
 
 ---
 
@@ -154,13 +156,13 @@ The Lock Inspector feature follows the core lightweight design policy:
 
 ---
 
-## Release Process (Intended — Not Yet Implemented)
+## Release Process
 
 1. Confirm all quality gate items are met.
 2. Update version constant in source and version resource in `.rc`.
 3. Create a signed git tag: `v0.1.0`
-4. Push the tag to trigger CI release workflow.
-5. CI builds the Release executable and uploads it to GitHub Release.
-6. Generate SHA-256 checksum and attach to release notes.
-7. Validate the artifact on a clean machine before marking the release final.
-8. If a defect is found, create a patch release (`v0.1.1`) rather than overwriting the published artifact.
+4. Push the tag to trigger the release workflow.
+5. CI builds/tests Release, creates `wperf-vX.Y.Z-windows-x64.zip`, and uploads
+   it with its `.sha256` checksum to the GitHub Release.
+6. Validate the artifact on a clean machine before marking the release final.
+7. If a defect is found, create a patch release (`v0.1.1`) rather than overwriting the published artifact.

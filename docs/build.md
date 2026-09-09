@@ -51,6 +51,20 @@ cmake --build build --config Release
 
 Output: `build/Release/wperf.exe`
 
+## Package a Release
+
+From a Release build, create the versioned Windows x64 ZIP and SHA-256
+sidecar locally with:
+
+```powershell
+.\scripts\package.ps1 -BuildDir build\Release -Version v0.1.0
+```
+
+This writes `artifacts/wperf-v0.1.0-windows-x64.zip` containing `wperf.exe`
+and `LICENSE`, plus the matching `.sha256` file. Tagged pushes run the same
+script in [`.github/workflows/release.yml`](../.github/workflows/release.yml)
+after the Release test suite passes.
+
 Tests are built by default as the separate `wperf_tests` target. Configure with
 `-DBUILD_TESTING=OFF` to build only the application. See [testing.md](testing.md)
 for CTest commands, coverage, and CI details.

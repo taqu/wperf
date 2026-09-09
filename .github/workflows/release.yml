@@ -26,8 +26,35 @@ jobs:
       - name: Build
         run: cmake --build build --config Release --parallel
 
-      - name: Upload release
+      - name: Test Release
+        run: ctest --test-dir build -C Release --output-on-failure --no-tests=error
+
+      - name: Package Windows x64 release
+        shell: pwsh
+        run: .\scripts\package.ps1 -BuildDir build\Release -Version "${{ github.ref_name }}" -OutputDir artifacts
+
+      - name: Verify package contents
+        shell: pwsh
+        run: |
+          $archive = "artifacts/wperf-${{ github.ref_name }}-windows-x64.zip"
+          if (-not (Test-Path -LiteralPath $archive)) { throw "Package not found: $archive" }
+          $entries = tar -tf $archive
+          if (($entries -notcontains "wperf.exe") -or ($entries -notcontains "LICENSE")) {
+            throw "Package must contain wperf.exe and LICENSE"
+          }
+
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: wperf-${{ github.ref_name }}-windows-x64
+          path: |
+            artifacts/wperf-${{ github.ref_name }}-windows-x64.zip
+            artifacts/wperf-${{ github.ref_name }}-windows-x64.zip.sha256
+
+      - name: Upload release assets
         uses: softprops/action-gh-release@v2
         with:
-          files: build/Release/wperf.exe
+          files: |
+            artifacts/wperf-${{ github.ref_name }}-windows-x64.zip
+            artifacts/wperf-${{ github.ref_name }}-windows-x64.zip.sha256
           generate_release_notes: true
