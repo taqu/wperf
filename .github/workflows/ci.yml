@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install CMake 4.x
+        uses: lukka/get-cmake@latest
+        with:
+          cmakeVersion: "~4.2.0"
+
+      - name: Configure
+        run: cmake -S . -B build -A x64
+
+      - name: Build Debug
+        run: cmake --build build --config Debug --parallel
+
+      - name: Test Debug
+        run: ctest --test-dir build -C Debug --output-on-failure --no-tests=error
+
+      - name: Verify Debug artifact
+        run: |
+          if (-not (Test-Path "build/Debug/wperf.exe")) {
+            Write-Error "build/Debug/wperf.exe not found"
+            exit 1
+          }
+
+      - name: Build Release
+        run: cmake --build build --config Release --parallel
+
+      - name: Test Release
+        run: ctest --test-dir build -C Release --output-on-failure --no-tests=error
+
+      - name: Verify Release artifact
+        run: |
+          if (-not (Test-Path "build/Release/wperf.exe")) {
+            Write-Error "build/Release/wperf.exe not found"
+            exit 1
+          }

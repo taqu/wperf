@@ -19,7 +19,7 @@ void BeginMemory(PurgeMemoryProcesses& processes)
     if(!EnumProcesses(processes.processes_, sizeof(DWORD)*PurgeMemoryProcesses::MaxProcesses, &needed)){
         return;
     }
-    processes.numProcesses_ = (std::min)(needed / sizeof(DWORD), static_cast<size_t>(PurgeMemoryProcesses::MaxProcesses));
+    processes.numProcesses_ = static_cast<DWORD>((std::min)(needed / sizeof(DWORD), static_cast<size_t>(PurgeMemoryProcesses::MaxProcesses)));
 }
 
 void PurgeMemory(PurgeMemoryProcesses& processes)

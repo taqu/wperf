@@ -1,3 +1,6 @@
+#include "app_logic.h"
+#include "lock_cli.h"
+#include "lock_gui.h"
 #include "resource.h"
 #include "resource_monitor.h"
 #include <algorithm>
@@ -5,6 +8,9 @@
 #include <commctrl.h>
 #include <cstdint>
 #include <dxgi.h>
+#include <shellapi.h>
+#include <atomic>
+#include <thread>
 #include <windows.h>
 #include "purge_memory.h"
 // Main window proc and helpers
@@ -23,13 +29,16 @@ namespace
     static const wchar_t* AppName = L"wperf";
     static const wchar_t* IniFileName = L"wperf.ini";
     static const wchar_t* SettingsName = L"Settings";
-    static constexpr float Giga = 1024.0f * 1024.0f * 1024.0f;
-    static constexpr float Mega = 1024.0f * 1024.0f;
-    static constexpr float Kilo = 1024.0f;
-
     static constexpr int32_t MenuID_Settings = 1001;
     static constexpr int32_t MenuID_MemoryPurge = 1002;
     static constexpr int32_t MenuID_Exit = 1003;
+    static constexpr int32_t MenuID_LockInspector = 1004;
+    static constexpr UINT TrayCallbackMessage = WM_APP + 10;
+    static constexpr UINT TrayIconId = 1;
+    NOTIFYICONDATAW g_trayIcon{};
+    bool g_trayIconAdded = false;
+    std::atomic_bool g_lockUiRunning{false};
+    std::thread g_lockUiThread;
 
     static constexpr int32_t TimerID_PurgeMemory = 2;
 
@@ -71,23 +80,6 @@ namespace
             return length;
         }
         return 0;
-    }
-
-    void FormatBytes(DWORD size, wchar_t* buffer, ULONGLONG bytes)
-    {
-        swprintf_s(buffer, size, L"%.1f GB", (float)bytes / Giga);
-    }
-
-    void FormatNetworkSpeed(DWORD size, wchar_t* buffer, double bps)
-    {
-        if(bps >= Giga)
-            swprintf_s(buffer, size, L"%.2f GB/s", bps / Giga);
-        else if(bps >= Mega)
-            swprintf_s(buffer, size, L"%.2f MB/s", bps / Mega);
-        else if(bps >= Kilo)
-            swprintf_s(buffer, size, L"%.1f KB/s", bps / Kilo);
-        else
-            swprintf_s(buffer, size, L"%.0f B/s", bps);
     }
 
     void DrawCard(HDC hdc, const RECT& rect, COLORREF accentColor)
@@ -145,11 +137,6 @@ namespace
         SelectObject(hdc, hPenOld);
         DeleteObject(hPenOutline);
     }
-    struct AppSettings
-    {
-        int32_t updateIntervalMs = 1000;
-        bool alwaysOnTop = false;
-    };
     AppSettings g_settings;
     HWND g_hwndToolWindow = nullptr;
 
@@ -161,13 +148,89 @@ namespace
     static constexpr wchar_t SettingsClassName[] = L"wperfSettings";
     static constexpr wchar_t MemoryPurgeClassName[] = L"wperfMemoryPurge";
 
+    HWND FindOwnLockInspector()
+    {
+        HWND candidate = nullptr;
+        const DWORD self = GetCurrentProcessId();
+        while((candidate = FindWindowExW(nullptr, candidate, L"wperfLockInspector", nullptr)) != nullptr) {
+            DWORD owner = 0;
+            GetWindowThreadProcessId(candidate, &owner);
+            if(owner == self)
+                return candidate;
+        }
+        return nullptr;
+    }
+
+    void OpenLockInspector()
+    {
+        HWND existing = FindOwnLockInspector();
+        if(existing) {
+            ShowWindow(existing, SW_RESTORE);
+            SetForegroundWindow(existing);
+            return;
+        }
+        if(g_lockUiRunning.exchange(true))
+            return;
+        if(g_lockUiThread.joinable())
+            g_lockUiThread.join();
+        g_lockUiThread = std::thread([] {
+            const int result = RunLockInspectorGui(GetModuleHandleW(nullptr), SW_SHOWNORMAL, {});
+            g_lockUiRunning.store(false);
+            if(result != 0)
+                MessageBoxW(nullptr, L"Unable to open Lock Inspector.", L"wperf", MB_ICONERROR | MB_OK);
+        });
+    }
+
+    void CloseLockInspector()
+    {
+        if(!g_lockUiRunning.load()) {
+            if(g_lockUiThread.joinable())
+                g_lockUiThread.join();
+            return;
+        }
+        for(int i = 0; i < 40 && !FindOwnLockInspector(); ++i)
+            Sleep(10);
+        if(HWND window = FindOwnLockInspector())
+            PostMessageW(window, WM_CLOSE, 0, 0);
+        if(g_lockUiThread.joinable())
+            g_lockUiThread.join();
+    }
+
+    void ShowTrayMenu(HWND hwnd)
+    {
+        HMENU menu = CreatePopupMenu();
+        if(!menu)
+            return;
+        AppendMenuW(menu, MF_STRING, MenuID_Settings, L"Settings");
+        AppendMenuW(menu, MF_STRING, MenuID_LockInspector, L"Lock Inspector...");
+        AppendMenuW(menu, MF_STRING, MenuID_MemoryPurge, L"Purge Memory");
+        AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+        AppendMenuW(menu, MF_STRING, MenuID_Exit, L"Exit");
+        POINT point{};
+        GetCursorPos(&point);
+        SetForegroundWindow(hwnd);
+        const int selection = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_LEFTALIGN | TPM_RIGHTBUTTON,
+                                             point.x, point.y, 0, hwnd, nullptr);
+        DestroyMenu(menu);
+        if(selection == MenuID_Settings)
+            ShowSettingsDialog(hwnd);
+        else if(selection == MenuID_LockInspector)
+            OpenLockInspector();
+        else if(selection == MenuID_MemoryPurge)
+            ShowMemoryPurgeDialog(hwnd);
+        else if(selection == MenuID_Exit)
+            DestroyWindow(hwnd);
+        PostMessageW(hwnd, WM_NULL, 0, 0);
+    }
+
     void LoadSettings(size_t length, const wchar_t* iniPath)
     {
         if(length <= 0) {
             return;
         }
-        g_settings.updateIntervalMs = std::clamp((int32_t)GetPrivateProfileIntW(SettingsName, L"UpdateIntervalMs", 1000, iniPath), 250, 60000);
-        g_settings.alwaysOnTop = GetPrivateProfileIntW(SettingsName, L"AlwaysOnTop", 0, iniPath) != 0;
+        g_settings = SettingsFromStoredValues(
+            (int32_t)GetPrivateProfileIntW(SettingsName, L"UpdateIntervalMs", 1000, iniPath),
+            GetPrivateProfileIntW(SettingsName, L"AlwaysOnTop", 0, iniPath) != 0);
     }
 
     void SaveSettings(const wchar_t* iniPath)
@@ -277,9 +340,7 @@ LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPa
         if(id == kDlgOK) {
             wchar_t intervalBuf[16] = {};
             GetDlgItemTextW(hwnd, kDlgIntervalEdit, intervalBuf, 16);
-            int32_t newInterval = _wtoi(intervalBuf);
-            if(newInterval >= 250 && newInterval <= 60000)
-                g_settings.updateIntervalMs = newInterval;
+            ApplyIntervalText(g_settings, intervalBuf);
             g_settings.alwaysOnTop = SendDlgItemMessageW(hwnd, kDlgAlwaysOnTopChk, BM_GETCHECK, 0, 0) == BST_CHECKED;
 
             GetIniFilePath(ResourceMonitor::kBufferWChars, g_monitor.GetTextBuffer());
@@ -570,6 +631,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     UNREFERENCED_PARAMETER(hPrevInstance);
     UNREFERENCED_PARAMETER(lpCmdLine);
 
+    cli::Options startupOptions;
+    const int cliExitCode = cli::DispatchCommandLine(&startupOptions);
+    if(cliExitCode >= 0) return cliExitCode;
+    if(startupOptions.mode == cli::Mode::LockUi)
+        return RunLockInspectorGui(hInstance, nCmdShow, startupOptions.path);
+
     // Enable modern visual styling
     InitCommonControls();
 
@@ -710,28 +777,19 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 
     case WM_RBUTTONUP:
     case WM_NCRBUTTONUP: {
-        HMENU hMenu = CreatePopupMenu();
-        AppendMenuW(hMenu, MF_STRING, MenuID_Settings, L"Settings");
-        AppendMenuW(hMenu, MF_STRING, MenuID_MemoryPurge, L"Purge Memory");
-        AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
-        AppendMenuW(hMenu, MF_STRING, MenuID_Exit, L"Exit");
-
-        POINT pt;
-        GetCursorPos(&pt);
-
-        SetForegroundWindow(hwnd);
-        int32_t selection = TrackPopupMenu(hMenu, TPM_RETURNCMD | TPM_LEFTALIGN | TPM_RIGHTBUTTON, pt.x, pt.y, 0, hwnd, nullptr);
-        DestroyMenu(hMenu);
-
-        if(selection == MenuID_Settings) {
-            ShowSettingsDialog(hwnd);
-        } else if(selection == MenuID_MemoryPurge) {
-            ShowMemoryPurgeDialog(hwnd);
-        } else if(selection == MenuID_Exit) {
-            DestroyWindow(hwnd);
-        }
+        ShowTrayMenu(hwnd);
         return 0;
     }
+
+    case TrayCallbackMessage:
+        if(lParam == WM_RBUTTONUP)
+            ShowTrayMenu(hwnd);
+        else if(lParam == WM_LBUTTONUP || lParam == WM_LBUTTONDBLCLK) {
+            ShowWindow(hwnd, IsWindowVisible(hwnd) ? SW_HIDE : SW_SHOWNA);
+            if(IsWindowVisible(hwnd))
+                SetForegroundWindow(hwnd);
+        }
+        return 0;
 
     case WM_PAINT: {
         return OnPaintMain(hwnd, g_monitor);
@@ -742,6 +800,7 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 
     case WM_DESTROY: {
         KillTimer(hwnd, 1);
+        CloseLockInspector();
 
         // Save window coordinates into wperf.ini
         WINDOWPLACEMENT wp = {0};
