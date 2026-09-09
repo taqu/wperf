@@ -1,3 +1,4 @@
+#include "app_logic.h"
 #include "resource.h"
 #include "resource_monitor.h"
 #include <algorithm>
@@ -23,10 +24,6 @@ namespace
     static const wchar_t* AppName = L"wperf";
     static const wchar_t* IniFileName = L"wperf.ini";
     static const wchar_t* SettingsName = L"Settings";
-    static constexpr float Giga = 1024.0f * 1024.0f * 1024.0f;
-    static constexpr float Mega = 1024.0f * 1024.0f;
-    static constexpr float Kilo = 1024.0f;
-
     static constexpr int32_t MenuID_Settings = 1001;
     static constexpr int32_t MenuID_MemoryPurge = 1002;
     static constexpr int32_t MenuID_Exit = 1003;
@@ -71,23 +68,6 @@ namespace
             return length;
         }
         return 0;
-    }
-
-    void FormatBytes(DWORD size, wchar_t* buffer, ULONGLONG bytes)
-    {
-        swprintf_s(buffer, size, L"%.1f GB", (float)bytes / Giga);
-    }
-
-    void FormatNetworkSpeed(DWORD size, wchar_t* buffer, double bps)
-    {
-        if(bps >= Giga)
-            swprintf_s(buffer, size, L"%.2f GB/s", bps / Giga);
-        else if(bps >= Mega)
-            swprintf_s(buffer, size, L"%.2f MB/s", bps / Mega);
-        else if(bps >= Kilo)
-            swprintf_s(buffer, size, L"%.1f KB/s", bps / Kilo);
-        else
-            swprintf_s(buffer, size, L"%.0f B/s", bps);
     }
 
     void DrawCard(HDC hdc, const RECT& rect, COLORREF accentColor)
@@ -145,11 +125,6 @@ namespace
         SelectObject(hdc, hPenOld);
         DeleteObject(hPenOutline);
     }
-    struct AppSettings
-    {
-        int32_t updateIntervalMs = 1000;
-        bool alwaysOnTop = false;
-    };
     AppSettings g_settings;
     HWND g_hwndToolWindow = nullptr;
 
@@ -166,8 +141,9 @@ namespace
         if(length <= 0) {
             return;
         }
-        g_settings.updateIntervalMs = std::clamp((int32_t)GetPrivateProfileIntW(SettingsName, L"UpdateIntervalMs", 1000, iniPath), 250, 60000);
-        g_settings.alwaysOnTop = GetPrivateProfileIntW(SettingsName, L"AlwaysOnTop", 0, iniPath) != 0;
+        g_settings = SettingsFromStoredValues(
+            (int32_t)GetPrivateProfileIntW(SettingsName, L"UpdateIntervalMs", 1000, iniPath),
+            GetPrivateProfileIntW(SettingsName, L"AlwaysOnTop", 0, iniPath) != 0);
     }
 
     void SaveSettings(const wchar_t* iniPath)
@@ -277,9 +253,7 @@ LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPa
         if(id == kDlgOK) {
             wchar_t intervalBuf[16] = {};
             GetDlgItemTextW(hwnd, kDlgIntervalEdit, intervalBuf, 16);
-            int32_t newInterval = _wtoi(intervalBuf);
-            if(newInterval >= 250 && newInterval <= 60000)
-                g_settings.updateIntervalMs = newInterval;
+            ApplyIntervalText(g_settings, intervalBuf);
             g_settings.alwaysOnTop = SendDlgItemMessageW(hwnd, kDlgAlwaysOnTopChk, BM_GETCHECK, 0, 0) == BST_CHECKED;
 
             GetIniFilePath(ResourceMonitor::kBufferWChars, g_monitor.GetTextBuffer());

@@ -51,6 +51,10 @@ cmake --build build --config Release
 
 Output: `build/Release/wperf.exe`
 
+Tests are built by default as the separate `wperf_tests` target. Configure with
+`-DBUILD_TESTING=OFF` to build only the application. See [testing.md](testing.md)
+for CTest commands, coverage, and CI details.
+
 ---
 
 ## Clean Build

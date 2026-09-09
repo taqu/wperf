@@ -1,6 +1,6 @@
 # wperf Project Baseline
 
-Repository baseline. Last updated 2026-09-09 (Phase 1 build verification).
+Repository baseline. Last updated 2026-09-09 (Phase 5 test infrastructure).
 
 ---
 
@@ -113,7 +113,7 @@ See `docs/build.md` for the complete build guide.
 
 ## External Dependencies
 
-**Confirmed**: No third-party libraries, NuGet packages, vcpkg manifests, or bundled external code. All dependencies are part of the Windows SDK.
+Production dependencies remain Windows SDK libraries. Tests additionally use the vendored doctest 2.4.12 header and MIT license; no download is needed at build time.
 
 | Library | Purpose | Source |
 |---------|---------|--------|
@@ -196,19 +196,29 @@ Settings are stored in `wperf.ini` located in the same directory as `wperf.exe`.
 
 ## Current Test Status
 
-**Confirmed**: No test framework, unit tests, integration tests, or smoke tests exist.
+Phase 5 uses doctest 2.4.12 with CTest. The initial audit found no existing
+unit/integration tests, test executables, harnesses, or smoke-test scripts to
+maintain or integrate. CI previously performed build/artifact checks only.
 
-Components that could be tested independently in a future phase:
-- Metric value formatting (byte-to-GB conversion, throughput display)
-- INI path construction (module path resolution)
-- Settings parsing logic
-- Memory purge batch iteration logic
+`tests/CMakeLists.txt` builds `wperf_tests` by default (`BUILD_TESTING=OFF` disables
+it). CTest registers `wperf.unit` with the `unit` label and a 30-second timeout.
+The 18 doctest cases cover formatting, settings defaults/normalization/dialog
+fallback, and CPU percentage calculations. Small inline helpers extracted into
+`include/app_logic.h` are shared by production and tests.
 
-Components that are difficult to test without a running system:
-- GUI rendering
-- PDH counter integration
-- DXGI GPU enumeration
-- Live network interface enumeration
+```powershell
+ctest --test-dir build -C Debug --output-on-failure --no-tests=error
+ctest --test-dir build -C Release --output-on-failure --no-tests=error
+```
+
+Clean local Debug/Release builds and 18 cases passed in `build-phase5`; both
+application artifacts were verified. Each suite completed in under 0.2 seconds.
+GitHub-hosted execution has not been verified. Tests use only in-memory inputs.
+
+Major gaps: INI persistence/missing-key handling, executable path construction,
+UI interactions, live metrics and GPU hardware, startup/shutdown, and memory
+purge. No generic path utility exists; future Lock Inspector tests are deferred.
+See [testing.md](testing.md) for exact validation commands and isolation details.
 
 ---
 
@@ -222,11 +232,11 @@ Components that are difficult to test without a running system:
 | Main branch build verification | Present — `.github/workflows/ci.yml` |
 | Debug build CI | Present — `.github/workflows/ci.yml` |
 | Release build CI (tag-triggered) | Present — `.github/workflows/release.yml` |
-| Test CI | Not present |
+| Test CI | Debug + Release unit suite in `ci.yml` (Phase 5) |
 | Lint / static analysis | Not present |
 | Release artifact checksums | Not present |
 
-**`ci.yml`** triggers on every push to `main` and on all pull requests. It runs on `windows-latest`, configures with `cmake -S . -B build -A x64`, builds Debug and Release, and verifies both executables exist.
+**`ci.yml`** triggers on every push to `main` and on all pull requests. It runs on `windows-latest`, configures with `cmake -S . -B build -A x64`, builds and tests Debug and Release, and verifies both executables exist.
 
 **`release.yml`** triggers on `v*.*.*` tag pushes. It builds Release and uploads `build/Release/wperf.exe` to the GitHub Release.
 
@@ -271,8 +281,8 @@ The current README covers: features, settings, requirements, build instructions,
 |------|----------|-------|
 | No version metadata in executable | Medium | Users and support cannot determine installed version |
 | `WINVER=0x0601` (Vista) but SDK 10.0.26100.0 | Low | Mismatch between declared and actual minimum; needs platform testing |
-| No PR/main branch build CI | Medium | Regressions not caught until a release tag is pushed |
-| No tests | Medium | Logic correctness depends entirely on manual verification |
+| GitHub-hosted Phase 5 CI unverified | Low | Workflow updated; remote execution still needs verification |
+| Limited automated tests | Medium | Pure helpers covered; Windows integration and UI still need manual verification |
 | `SetProcessDPIAware` (old API) | Low | Superseded by manifest-based DPI awareness; functional but not ideal |
 | Memory purge silently fails on protected processes | Low | Expected behavior; no user-visible error reporting |
 | GPU metrics absent without DirectX 11 GPU | Low | Code appears to degrade gracefully; not tested on systems without GPU |

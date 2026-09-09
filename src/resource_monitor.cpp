@@ -1,3 +1,4 @@
+#include "app_logic.h"
 #include "resource_monitor.h"
 #include <dxgi.h>
 #include <pdh.h>
@@ -113,14 +114,7 @@ void ResourceMonitor::UpdateCpuUsage()
     ULONGLONG kernelDiff = kernel - FileTimeToQuadWord(&m_prevKernelTime);
     ULONGLONG userDiff = user - FileTimeToQuadWord(&m_prevUserTime);
 
-    // kernelDiff includes idle time on Windows
-    ULONGLONG totalDiff = kernelDiff + userDiff;
-    if(totalDiff > 0)
-        m_cpuUsage = idleDiff <= totalDiff
-                         ? 100.0 * (double)(totalDiff - idleDiff) / (double)totalDiff
-                         : 0.0;
-    else
-        m_cpuUsage = 0.0;
+    m_cpuUsage = CpuUsageFromDeltas(idleDiff, kernelDiff, userDiff);
 
     m_prevIdleTime = idleTime;
     m_prevKernelTime = kernelTime;

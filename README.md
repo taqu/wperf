@@ -105,6 +105,7 @@ See [docs/roadmap.md](docs/roadmap.md) for the full development roadmap.
 | Document | Description |
 |----------|-------------|
 | [docs/build.md](docs/build.md) | Complete build instructions |
+| [docs/testing.md](docs/testing.md) | Automated tests and remaining manual checks |
 | [docs/supported-platforms.md](docs/supported-platforms.md) | Supported platforms and toolchain details |
 | [docs/project-baseline.md](docs/project-baseline.md) | Technical repository baseline |
 | [docs/release-policy.md](docs/release-policy.md) | Versioning and release quality gates |

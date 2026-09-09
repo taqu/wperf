@@ -45,7 +45,9 @@ This disables non-conforming language extensions and enforces two-phase name loo
 
 The warning policy applies to project-owned code in `src/` and `include/`. MSVC does not emit `/W4` warnings from system or SDK headers under normal circumstances; no additional suppression of Windows SDK headers is currently required.
 
-`wperf` has no vendored third-party libraries.
+The test-only doctest header is vendored under `tests/third_party` and included
+as a system header. Project-owned test code uses the same `/W4 /WX /permissive-`
+and `/utf-8` baseline. The application has no third-party runtime dependency.
 
 ---
 

@@ -16,6 +16,7 @@ include_directories(AFTER ${RESOURCE_DIR})
 add_compile_definitions(UNICODE _UNICODE WINVER=0x0601 _WIN32_WINNT=0x0601)
 
 set(HEADERS
+    ${HEADER_DIR}/app_logic.h
     ${HEADER_DIR}/resource_monitor.h
     ${HEADER_DIR}/purge_memory.h
 )
@@ -48,3 +49,8 @@ target_compile_options(${PROJECT_NAME} PRIVATE /W4 /WX /permissive- /utf-8)
 target_compile_options(${PROJECT_NAME} PRIVATE $<$<CONFIG:Release>:/O2 /Oi /Gy /GL>)
 target_link_options(${PROJECT_NAME} PRIVATE $<$<CONFIG:Release>:/OPT:REF /OPT:ICF /LTCG>)
 set_target_properties(${PROJECT_NAME} PROPERTIES LINK_FLAGS "/HEAP:0,0 /STACK:0,0")
+
+include(CTest)
+if(BUILD_TESTING)
+    add_subdirectory(tests)
+endif()
