@@ -48,9 +48,10 @@ LockGuiPresentation PresentLockInspection(const LockInspectionResult& result)
     for(const auto& process: result.processes) {
         const std::wstring name = process.name.empty() ? L"(name unavailable)" : process.name;
         if(process.resources.empty()) {
-            view.rows.push_back({name, process.pid, {}});
+            view.rows.push_back({name, process.pid, process.startTime, {}});
         } else {
-            for(const auto& resource: process.resources) view.rows.push_back({name, process.pid, resource});
+            for(const auto& resource: process.resources)
+                view.rows.push_back({name, process.pid, process.startTime, resource});
         }
     }
     std::sort(view.rows.begin(), view.rows.end(), [](const LockGuiRow& left, const LockGuiRow& right) {

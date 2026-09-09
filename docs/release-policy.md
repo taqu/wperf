@@ -49,7 +49,7 @@ v0.1.0-rc2
 - Window position and update interval persistence
 - On-demand memory purge
 - Always-on-top mode
-- On-demand Lock Inspector: core, human/JSON CLI, explicit native deep scan, and GUI implemented (Phases 6-9); process control, tray integration, and Explorer integration pending
+- On-demand Lock Inspector: core, human/JSON CLI, explicit native deep scan, GUI, and explicit process control implemented (Phases 6-10); tray integration and Explorer integration pending
 - Reproducible Release build (CMake + MSVC)
 - Basic Windows CI (build verification)
 - Essential user documentation
@@ -121,6 +121,7 @@ The following criteria must be met before tagging a final release.
 | Version constant present in source code | Planned |
 | Version resource embedded in executable (VERSIONINFO) | Planned |
 | Documentation updated and accurate | In progress |
+| Controlled process actions manually validated before release | Implemented (Phase 10; opt-in integration coverage) |
 | Release artifact validated on a clean Windows 10 or Windows 11 environment | Planned |
 | Release candidate tested before final tag | Planned |
 | SHA-256 checksum generated and attached to GitHub Release | Planned |
@@ -129,12 +130,14 @@ The following criteria must be met before tagging a final release.
 
 ## Lock Inspector Policy
 
-Phases 6-9 implement the discovery-only Restart Manager core, CLI, native
+Phases 6-10 implement the Restart Manager core, CLI, native
 fallback (`wperf.exe --lock <absolute-path> [--deep] [--json]`). Restart Manager
 remains the default; native scanning is explicit and on demand. Directory
 descendant matching is supported, with partial results for inaccessible
 processes/handles. The GUI is available through `wperf.exe --lock-ui [path]`.
-Process control, tray integration, and Explorer integration remain pending.
+Process control is explicit, identity-validated, confirmation-gated for force
+termination, and manually validated with controlled processes. Tray integration
+and Explorer integration remain pending.
 Remote handle closing is absent. See [lock-inspector.md](lock-inspector.md).
 
 The Lock Inspector feature follows the core lightweight design policy:

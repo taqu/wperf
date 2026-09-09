@@ -1,10 +1,10 @@
 # Lock Inspector
 
-Lock Inspector is read-only, on-demand discovery. Restart Manager is the default
+Lock Inspector discovery is read-only and on demand. Restart Manager is the default
 low-cost backend. Phase 8 adds an explicit native handle scan for additional
 coverage, including handles to a directory and files beneath it. Phase 9 adds a
-small native Win32 frontend over the same API. Explorer integration and process
-control are not implemented.
+small native Win32 frontend over the same API. Phase 10 adds explicit process
+control; Explorer integration is not implemented.
 
 ## GUI usage
 
@@ -33,9 +33,29 @@ window immediately; the dedicated UI entry waits safely for the bounded worker
 to finish and discards its result. The worker then terminates and its handle is
 released. Closing an idle GUI exits immediately.
 
-The GUI is discovery-only: it cannot terminate a process, close a remote handle,
-modify the target, retry deletion, or request elevation. It is not integrated
-into the monitor menu, system tray, or Explorer.
+The GUI does not close remote handles, modify the target, retry deletion, or
+request elevation. It is not integrated into the monitor menu, system tray, or
+Explorer.
+
+## Process control
+
+Select exactly one process row to enable **Close Normally** and **Force
+Terminate**. Actions are disabled while a scan or another action is active.
+Close Normally best-effort sends `WM_CLOSE` to that process's top-level windows,
+waits briefly, and then rescans the target. A process without a closable window
+may remain running. Force Terminate uses the minimum process rights needed for
+identity validation, termination, and a bounded exit wait; it always asks for
+confirmation and warns that unsaved data may be lost. Both actions rescan using
+the previous normal/deep mode, and the result—not the API call alone—is the
+source of truth.
+
+Before either action, wperf compares the selected PID and captured process
+creation time with a fresh process identity. If the PID was reused, the action
+is refused and the result is refreshed. wperf also refuses to control itself,
+does not enable SeDebugPrivilege or elevation, and never closes remote handles.
+Access-denied, exited, stale-identity, no-window, and timeout outcomes remain
+non-fatal to the GUI. There is no bulk termination, service control, delete or
+retry operation, and no destructive CLI command.
 
 ## CLI usage
 
@@ -220,10 +240,11 @@ inspection uses temporary state and one watchdog, releases local resources and
 returns; the CLI then exits. Normal desktop monitoring is intentionally unchanged;
 the existing app has no tray icon.
 
-No process termination, remote handle closing, `DUPLICATE_CLOSE_SOURCE`, shutdown,
-Explorer integration, elevation, retry-delete or release packaging is added.
-Discovery may temporarily open metadata handles but never changes another
-process's handle table or file contents.
+Process termination is available only through explicit, identity-validated GUI
+actions. Remote handle closing, `DUPLICATE_CLOSE_SOURCE`, Restart Manager
+shutdown, Explorer integration, elevation, retry-delete and release packaging
+are not added. Discovery and process control never modify another process's
+handle table or file contents.
 
 ## Validation
 

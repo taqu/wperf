@@ -11,6 +11,7 @@ struct LockGuiRow
 {
     std::wstring process;
     uint32_t pid = 0;
+    uint64_t startTime = 0;
     std::wstring resource;
 };
 

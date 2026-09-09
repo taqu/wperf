@@ -67,7 +67,7 @@ CMake target `wperf_lock_inspector` compiles `src/lock_inspector.cpp`, links
 `src/lock_inspector_internal.h` contains the narrow backend test seam.
 
 Discovery uses Restart Manager sessions with RAII cleanup and bounded list
-retries. Phase 7 adds `wperf.exe --lock <absolute-path> [--json]` and `--help` through a small CLI frontend. Phase 8 adds explicit `--deep`: Restart Manager first, then a bounded native handle snapshot and result merge. Directory handles/descendants, Unicode path normalization and partial results are supported; protected processes remain limited. Native scanning is dormant unless requested. Phase 9 adds a native Win32 GUI at `wperf.exe --lock-ui [path]`; it uses one temporary worker per explicit scan and does not initialize the desktop monitor. Explorer integration, process termination, and remote handle closing remain absent.
+retries. Phase 7 adds `wperf.exe --lock <absolute-path> [--json]` and `--help` through a small CLI frontend. Phase 8 adds explicit `--deep`: Restart Manager first, then a bounded native handle snapshot and result merge. Directory handles/descendants, Unicode path normalization and partial results are supported; protected processes remain limited. Native scanning is dormant unless requested. Phase 9 adds a native Win32 GUI at `wperf.exe --lock-ui [path]`; it uses one temporary worker per explicit scan and does not initialize the desktop monitor. Phase 10 adds identity-validated graceful close and confirmed force termination. Explorer integration and remote handle closing remain absent.
 Files and directories are accepted as absolute wide paths; directory discovery
 is limited and does not recurse. Inactive inspection adds zero threads, timers,
 polling, or process scans. See [lock-inspector.md](lock-inspector.md).
@@ -192,7 +192,7 @@ Production dependencies remain Windows SDK libraries. Tests additionally use the
 | On-demand memory purge | Confirmed |
 | Right-click context menu | Confirmed |
 | System tray icon | Not present |
-| Lock Inspector | Core, CLI, native deep scan, and GUI implemented; process control and Explorer integration absent |
+| Lock Inspector | Core, CLI, native deep scan, GUI, graceful close, and force termination implemented; Explorer integration absent |
 
 ---
 
@@ -217,7 +217,7 @@ maintain or integrate. CI previously performed build/artifact checks only.
 
 `tests/CMakeLists.txt` builds `wperf_tests` by default (`BUILD_TESTING=OFF` disables
 it). CTest registers `wperf.unit` with the `unit` label and a 30-second timeout.
-The 56 doctest cases include 12 native/deep cases, eight CLI cases, three GUI presentation cases, the original 18 formatting/settings/CPU cases and
+The 58 doctest cases include 12 native/deep cases, eight CLI cases, three GUI presentation cases, two process-control identity cases, the original 18 formatting/settings/CPU cases and
 15 Lock Inspector cases covering validation, errors, conversion, deduplication,
 races, retries, and session cleanup. Small inline helpers extracted into
 `include/app_logic.h` are shared by production and tests.

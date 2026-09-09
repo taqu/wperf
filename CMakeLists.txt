@@ -18,6 +18,7 @@ add_compile_definitions(UNICODE _UNICODE WINVER=0x0601 _WIN32_WINNT=0x0601)
 set(HEADERS
     ${HEADER_DIR}/app_logic.h
     ${HEADER_DIR}/lock_gui.h
+    ${HEADER_DIR}/process_controller.h
     ${HEADER_DIR}/resource_monitor.h
     ${HEADER_DIR}/purge_memory.h
 )
@@ -64,10 +65,17 @@ add_library(wperf_lock_gui_presenter STATIC
 target_link_libraries(wperf_lock_gui_presenter PUBLIC wperf_lock_inspector)
 target_compile_options(wperf_lock_gui_presenter PRIVATE /W4 /WX /permissive- /utf-8)
 
+add_library(wperf_process_controller STATIC
+    ${HEADER_DIR}/process_controller.h
+    ${SOURCE_DIR}/process_controller.cpp
+)
+target_compile_options(wperf_process_controller PRIVATE /W4 /WX /permissive- /utf-8)
+
 target_link_libraries(${PROJECT_NAME} PRIVATE
     wperf_lock_inspector
     wperf_lock_cli
     wperf_lock_gui_presenter
+    wperf_process_controller
     shell32
     gdi32
     iphlpapi

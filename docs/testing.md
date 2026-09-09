@@ -9,7 +9,7 @@ CI only built and checked application artifacts; all behavior was untested by au
 The canonical framework is doctest 2.4.12, vendored with its MIT license under
 `tests/third_party/doctest`. Its single header keeps Windows/MSVC integration
 small and allows offline builds. CTest runs the `wperf_tests` console executable
-as one entry, `wperf.unit`, containing 56 independently named doctest cases,
+as one entry, `wperf.unit`, containing 58 independently named doctest cases,
 including Lock Inspector core, CLI, deep-scan, and GUI presentation coverage.
 Assertion checks remain active in Release and report expected/actual values.
 
@@ -149,8 +149,8 @@ ctest --test-dir build-phase8 -C Release --output-on-failure --no-tests=error
 
 Debug and Release builds: **PASS**, with `/W4 /WX /permissive- /utf-8` unchanged.
 Both test suites: **PASS**, all five CTest entries. The mandatory unit suite now
-has 56 cases, including 12 path/native/merge/deep-CLI cases plus Phase 9 GUI
-argument and presentation cases. The existing
+has 58 cases, including 12 path/native/merge/deep-CLI cases plus GUI and
+process-control identity cases. The existing
 integration executable now has seven cases (three RM, four native); a new
 `wperf.cli_deep` entry checks deep CLI Unicode human/JSON output, source/resource
 merging, complete/partial exit codes and released handles with a real JSON parser.
@@ -162,7 +162,12 @@ Phase 9 tests cover `--lock-ui` with and without a Unicode initial path,
 process/resource row expansion and sorting, empty/partial status text, and
 concise native error presentation. Raw Win32 creation, resizing, focus, picker,
 and close-during-scan behavior remain manual smoke tests; no GUI automation
-framework was added.
+framework was added. Phase 10 adds unit coverage for PID/creation-time identity
+matching, invalid identities, and self-termination refusal, plus four opt-in
+controlled process integration cases (graceful close, force termination, stale
+identity, and already-exited handling). These use disposable wperf GUI children
+and are excluded from default CI because interactive windows are not stable on
+hosted runners.
 
 Functional checks passed: held exact file, directory itself and descendant file,
 released/no-match case, Unicode/spaces, extended paths, partial inaccessible
