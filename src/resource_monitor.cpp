@@ -1,10 +1,12 @@
-#include "app_logic.h"
 #include "resource_monitor.h"
+#include "app_logic.h"
+
 #include <dxgi.h>
 #include <pdh.h>
 #include <stdio.h>
 #include <winsock2.h>
 #include <ws2tcpip.h>
+
 #include <iphlpapi.h>
 #include <netioapi.h>
 
@@ -103,8 +105,9 @@ void ResourceMonitor::Update()
 void ResourceMonitor::UpdateCpuUsage()
 {
     FILETIME idleTime, kernelTime, userTime;
-    if(!GetSystemTimes(&idleTime, &kernelTime, &userTime))
+    if(!GetSystemTimes(&idleTime, &kernelTime, &userTime)){
         return;
+    }
 
     ULONGLONG idle = FileTimeToQuadWord(&idleTime);
     ULONGLONG kernel = FileTimeToQuadWord(&kernelTime);
@@ -187,8 +190,9 @@ void ResourceMonitor::UpdateNetworkSpeed()
 void ResourceMonitor::InitDisk()
 {
     PDH_HQUERY hQuery = nullptr;
-    if(PdhOpenQueryW(nullptr, 0, &hQuery) != ERROR_SUCCESS)
+    if(PdhOpenQueryW(nullptr, 0, &hQuery) != ERROR_SUCCESS){
         return;
+    }
     PDH_HCOUNTER hRead = nullptr, hWrite = nullptr;
     PdhAddEnglishCounterW(hQuery, L"\\PhysicalDisk(_Total)\\Disk Read Bytes/sec", 0, &hRead);
     PdhAddEnglishCounterW(hQuery, L"\\PhysicalDisk(_Total)\\Disk Write Bytes/sec", 0, &hWrite);
@@ -200,10 +204,12 @@ void ResourceMonitor::InitDisk()
 
 void ResourceMonitor::UpdateDiskMetrics()
 {
-    if(!m_hDiskQuery)
+    if(!m_hDiskQuery){
         return;
-    if(PdhCollectQueryData((PDH_HQUERY)m_hDiskQuery) != ERROR_SUCCESS)
+    }
+    if(PdhCollectQueryData((PDH_HQUERY)m_hDiskQuery) != ERROR_SUCCESS){
         return;
+    }
 
     PDH_FMT_COUNTERVALUE val{};
     if(m_hDiskReadCounter && PdhGetFormattedCounterValue((PDH_HCOUNTER)m_hDiskReadCounter, PDH_FMT_DOUBLE, nullptr, &val) == ERROR_SUCCESS)
@@ -222,8 +228,9 @@ void ResourceMonitor::InitGpu()
     m_hGpuQuery = (HANDLE)hQuery;
 
     IDXGIFactory1* pFactory = nullptr;
-    if(FAILED(CreateDXGIFactory1(__uuidof(IDXGIFactory1), (void**)&pFactory)))
+    if(FAILED(CreateDXGIFactory1(__uuidof(IDXGIFactory1), (void**)&pFactory))){
         return;
+    }
 
     UINT idx = 0;
     IDXGIAdapter1* pAdapter = nullptr;
@@ -253,8 +260,9 @@ void ResourceMonitor::InitGpu()
     }
     pFactory->Release();
 
-    if(m_gpuCount > 0)
+    if(m_gpuCount > 0){
         PdhCollectQueryData((PDH_HQUERY)m_hGpuQuery);
+    }
 }
 
 void ResourceMonitor::UpdateGpuMetrics()
@@ -314,14 +322,16 @@ void ResourceMonitor::UpdateGpuMetrics()
                         m_gpuBufCap = m_gpuBuf ? cap : 0;
                     }
                     if(m_gpuBuf) {
-                        auto* pItems = reinterpret_cast<PDH_FMT_COUNTERVALUE_ITEM_W*>(m_gpuBuf);
+                        PDH_FMT_COUNTERVALUE_ITEM_W* pItems = reinterpret_cast<PDH_FMT_COUNTERVALUE_ITEM_W*>(m_gpuBuf);
                         if(PdhGetFormattedCounterArrayW((PDH_HCOUNTER)hCounter,
                                                         PDH_FMT_LARGE, &needed, &count, pItems)
                            == ERROR_SUCCESS) {
                             LONGLONG total = 0;
-                            for(DWORD j = 0; j < count; ++j)
-                                if(pItems[j].FmtValue.CStatus == 0)
+                            for(DWORD j = 0; j < count; ++j){
+                                if(pItems[j].FmtValue.CStatus == 0){
                                     total += pItems[j].FmtValue.largeValue;
+                                }
+                            }
                             vramUsed = (double)total;
                         }
                     }

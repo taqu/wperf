@@ -31,8 +31,10 @@ struct GpuMetrics
     double vramUsedBytes = 0.0;
 };
 
-// Lightweight non-owning view returned by GetGpuMetrics().
-// Supports the same .size() / operator[] usage as std::vector.
+/**
+ * Lightweight non-owning view returned by GetGpuMetrics().
+ * Supports the same .size() / operator[] usage as std::vector.
+ */
 struct GpuMetricsView
 {
     const GpuMetrics* data = nullptr;

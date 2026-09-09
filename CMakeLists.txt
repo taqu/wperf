@@ -37,7 +37,17 @@ source_group("resource" FILES ${RESOURCES})
 
 add_executable(${PROJECT_NAME} WIN32 ${HEADERS} ${SOURCES} ${RESOURCES})
 
+add_library(wperf_lock_inspector STATIC
+    ${HEADER_DIR}/lock_inspector.h
+    ${SOURCE_DIR}/lock_inspector_internal.h
+    ${SOURCE_DIR}/lock_inspector.cpp
+)
+target_include_directories(wperf_lock_inspector PUBLIC ${HEADER_DIR})
+target_compile_options(wperf_lock_inspector PRIVATE /W4 /WX /permissive- /utf-8)
+target_link_libraries(wperf_lock_inspector PRIVATE Rstrtmgr)
+
 target_link_libraries(${PROJECT_NAME} PRIVATE
+    wperf_lock_inspector
     gdi32
     iphlpapi
     comctl32

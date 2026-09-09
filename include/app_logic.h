@@ -35,26 +35,37 @@ struct AppSettings
     bool alwaysOnTop = false;
 };
 
-// Normalize integers returned by the INI reader; file access stays in main.cpp.
+/**
+ * @brief Normalize integers returned by the INI reader; file access stays in main.cpp.
+ * @param interval 
+ * @param alwaysOnTop 
+ * @return 
+ */
 inline AppSettings SettingsFromStoredValues(int32_t interval, bool alwaysOnTop)
 {
     return {std::clamp(interval, 250, 60000), alwaysOnTop};
 }
 
-// The dialog retains the previous interval when the entered value is invalid.
+/**
+ * @brief The dialog retains the previous interval when the entered value is invalid.
+ * @param settings 
+ * @param text 
+ */
 inline void ApplyIntervalText(AppSettings& settings, const wchar_t* text)
 {
     int32_t interval = _wtoi(text);
-    if(interval >= 250 && interval <= 60000)
+    if(interval >= 250 && interval <= 60000){
         settings.updateIntervalMs = interval;
+    }
 }
 
 inline double CpuUsageFromDeltas(uint64_t idle, uint64_t kernel, uint64_t user)
 {
     // Windows kernel time includes idle time.
     uint64_t total = kernel + user;
-    if(total > 0)
+    if(total > 0){
         return idle <= total ? 100.0 * (double)(total - idle) / (double)total : 0.0;
+    }
     return 0.0;
 }
 } // namespace wperf

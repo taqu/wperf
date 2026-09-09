@@ -1,6 +1,6 @@
 # wperf Project Baseline
 
-Repository baseline. Last updated 2026-09-09 (Phase 5 test infrastructure).
+Repository baseline. Last updated 2026-09-09 (Phase 6 Lock Inspector core).
 
 ---
 
@@ -57,6 +57,21 @@ main.cpp (WinMain)
   ├── Settings dialog        ← INI file persistence
   └── Memory purge dialog    ← on-demand, batched EmptyWorkingSet
 ```
+
+### Lock Inspector core (Phase 6)
+
+`include/lock_inspector.h` exposes synchronous `InspectLocks(path)` with
+project-owned process records and structured status/native errors. The static
+CMake target `wperf_lock_inspector` compiles `src/lock_inspector.cpp`, links
+`Rstrtmgr.lib`, and is linked by the application and tests. A private
+`src/lock_inspector_internal.h` contains the narrow backend test seam.
+
+Discovery uses Restart Manager sessions with RAII cleanup and bounded list
+retries. No application call site exists yet. There is no GUI, user CLI,
+Explorer integration, deep handle scan, process termination, or handle closing.
+Files and directories are accepted as absolute wide paths; directory discovery
+is limited and does not recurse. Inactive inspection adds zero threads, timers,
+polling, or process scans. See [lock-inspector.md](lock-inspector.md).
 
 ### Key Design Properties
 
@@ -124,6 +139,7 @@ Production dependencies remain Windows SDK libraries. Tests additionally use the
 | `comctl32` | Common controls, visual styles | Windows |
 | `dxgi` | GPU adapter enumeration via DXGI | Windows / DirectX |
 | `pdh` | Performance Data Helper counters (disk, GPU) | Windows |
+| `Rstrtmgr` | Lock Inspector core discovery (Phase 6) | Windows |
 
 **Note**: `msimg32` and `sapi` were originally linked but no call sites exist in the source. Both were removed from `CMakeLists.txt` in Phase 1. Confirmed by build and dumpbin dependency check.
 
@@ -177,7 +193,7 @@ Production dependencies remain Windows SDK libraries. Tests additionally use the
 | On-demand memory purge | Confirmed |
 | Right-click context menu | Confirmed |
 | System tray icon | Not present |
-| Lock Inspector | Not yet implemented |
+| Lock Inspector | Restart Manager discovery core implemented; user interface pending |
 
 ---
 
@@ -202,8 +218,9 @@ maintain or integrate. CI previously performed build/artifact checks only.
 
 `tests/CMakeLists.txt` builds `wperf_tests` by default (`BUILD_TESTING=OFF` disables
 it). CTest registers `wperf.unit` with the `unit` label and a 30-second timeout.
-The 18 doctest cases cover formatting, settings defaults/normalization/dialog
-fallback, and CPU percentage calculations. Small inline helpers extracted into
+The 33 doctest cases include the original 18 formatting/settings/CPU cases and
+15 Lock Inspector cases covering validation, errors, conversion, deduplication,
+races, retries, and session cleanup. Small inline helpers extracted into
 `include/app_logic.h` are shared by production and tests.
 
 ```powershell
@@ -211,13 +228,15 @@ ctest --test-dir build -C Debug --output-on-failure --no-tests=error
 ctest --test-dir build -C Release --output-on-failure --no-tests=error
 ```
 
-Clean local Debug/Release builds and 18 cases passed in `build-phase5`; both
-application artifacts were verified. Each suite completed in under 0.2 seconds.
-GitHub-hosted execution has not been verified. Tests use only in-memory inputs.
+Phase 6 clean validation results and commands are recorded in [testing.md](testing.md).
+Mandatory unit tests use only in-memory inputs. The separate
+`wperf_lock_integration_tests` target has three controlled-resource cases and
+requires `WPERF_BUILD_INTEGRATION_TESTS=ON`. It carries the `integration` label
+and is excluded from default CI pending GitHub-runner verification.
 
 Major gaps: INI persistence/missing-key handling, executable path construction,
 UI interactions, live metrics and GPU hardware, startup/shutdown, and memory
-purge. No generic path utility exists; future Lock Inspector tests are deferred.
+purge. Lock Inspector deep scanning and user-interface tests remain future work.
 See [testing.md](testing.md) for exact validation commands and isolation details.
 
 ---
@@ -232,7 +251,7 @@ See [testing.md](testing.md) for exact validation commands and isolation details
 | Main branch build verification | Present — `.github/workflows/ci.yml` |
 | Debug build CI | Present — `.github/workflows/ci.yml` |
 | Release build CI (tag-triggered) | Present — `.github/workflows/release.yml` |
-| Test CI | Debug + Release unit suite in `ci.yml` (Phase 5) |
+| Test CI | Debug + Release unit suite, including Lock Inspector, in `ci.yml` |
 | Lint / static analysis | Not present |
 | Release artifact checksums | Not present |
 
@@ -281,7 +300,7 @@ The current README covers: features, settings, requirements, build instructions,
 |------|----------|-------|
 | No version metadata in executable | Medium | Users and support cannot determine installed version |
 | `WINVER=0x0601` (Vista) but SDK 10.0.26100.0 | Low | Mismatch between declared and actual minimum; needs platform testing |
-| GitHub-hosted Phase 5 CI unverified | Low | Workflow updated; remote execution still needs verification |
+| GitHub-hosted Phase 6 CI unverified | Low | Workflow updated; remote execution still needs verification |
 | Limited automated tests | Medium | Pure helpers covered; Windows integration and UI still need manual verification |
 | `SetProcessDPIAware` (old API) | Low | Superseded by manifest-based DPI awareness; functional but not ideal |
 | Memory purge silently fails on protected processes | Low | Expected behavior; no user-visible error reporting |

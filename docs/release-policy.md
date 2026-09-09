@@ -49,7 +49,7 @@ v0.1.0-rc2
 - Window position and update interval persistence
 - On-demand memory purge
 - Always-on-top mode
-- Future on-demand Lock Inspector feature
+- On-demand Lock Inspector: Restart Manager core implemented (Phase 6); user-facing interface pending
 - Reproducible Release build (CMake + MSVC)
 - Basic Windows CI (build verification)
 - Essential user documentation
@@ -129,7 +129,12 @@ The following criteria must be met before tagging a final release.
 
 ## Lock Inspector Policy
 
-The future Lock Inspector feature must follow the core lightweight design policy:
+Phase 6 implements the discovery-only Restart Manager core. GUI and Explorer
+integration remain pending; deep native scanning, process termination, and
+handle closing are not implemented. Directory inspection is limited by Restart
+Manager and does not scan descendants. See [lock-inspector.md](lock-inspector.md).
+
+The Lock Inspector feature follows the core lightweight design policy:
 
 - Activated on demand only (no background polling while inactive)
 - Does not continuously enumerate system handles

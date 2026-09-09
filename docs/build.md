@@ -55,6 +55,11 @@ Tests are built by default as the separate `wperf_tests` target. Configure with
 `-DBUILD_TESTING=OFF` to build only the application. See [testing.md](testing.md)
 for CTest commands, coverage, and CI details.
 
+The Lock Inspector core is built as `wperf_lock_inspector` and linked with the
+Windows SDK's `Rstrtmgr.lib`; no additional SDK installation or downloaded
+dependency is needed. Real Restart Manager tests are opt-in with
+`-DWPERF_BUILD_INTEGRATION_TESTS=ON` and require `BUILD_TESTING=ON`.
+
 ---
 
 ## Clean Build
