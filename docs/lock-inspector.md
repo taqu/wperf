@@ -1,7 +1,9 @@
 # Lock Inspector CLI
 
-Phase 7 exposes the synchronous, discovery-only Windows Restart Manager core
-through an on-demand CLI. There is no Lock Inspector GUI or Explorer menu.
+Lock Inspector is read-only, on-demand discovery. Restart Manager is the default
+low-cost backend. Phase 8 adds an explicit native handle scan for additional
+coverage, including handles to a directory and files beneath it. There is no
+Lock Inspector GUI or Explorer integration.
 
 ## CLI usage
 
@@ -9,109 +11,194 @@ through an on-demand CLI. There is no Lock Inspector GUI or Explorer menu.
 .\wperf.exe --help
 .\wperf.exe --lock "C:\project\output.dll"
 .\wperf.exe --lock "C:\作業 folder\output.dll" --json
+.\wperf.exe --lock "C:\project\build" --deep
+.\wperf.exe --lock "C:\project\build" --deep --json
 ```
 
-Supply an existing absolute path. Relative paths are rejected by the core.
-`--json` may appear before or after `--lock <path>`. Duplicate flags, unknown
-arguments, empty/missing paths, and combining `--help` with other flags are
-invalid usage. No arguments starts the existing desktop monitor.
+Supply an existing absolute path. Normal mode runs Restart Manager only;
+`--deep` runs Restart Manager first, then one native scan and merges the results.
+There is no automatic scan on an empty normal result. Invalid input is rejected
+before native enumeration. `--json` and `--deep` may appear before or after
+`--lock <path>`. Duplicate/unknown flags, missing/empty paths, modifiers without
+`--lock`, and combining help with other arguments are invalid usage.
+No arguments starts the existing desktop monitor.
 
-The executable retains the Windows GUI subsystem. CLI mode attaches to the
-parent console when available and never allocates a console window. Console
-text uses Unicode; redirected stdout/stderr use UTF-8 without a BOM. For shells
-that do not wait for GUI executables, explicitly wait: in interactive cmd.exe,
-use `start "" /wait wperf.exe --lock "C:\project\output.dll"`. In PowerShell,
-a pipeline such as `& .\wperf.exe --lock "C:\project\output.dll" --json | Out-String`
-waits for completion; inspect `$LASTEXITCODE`. Windows Terminal behavior follows
-its hosted shell. Scripts can also launch with redirected streams and wait for
-the process, as the integration tests do.
+The executable keeps the GUI subsystem. CLI mode attaches to the parent console
+when available and never allocates a console window. Console text is Unicode;
+redirected stdout/stderr are UTF-8 without a BOM. Interactive cmd.exe may require
+`start "" /wait wperf.exe --lock "C:\project\build" --deep` to wait for a GUI
+executable. In PowerShell, a pipeline such as
+`& .\wperf.exe --lock "C:\project\build" --deep --json | Out-String`
+waits for completion; inspect `$LASTEXITCODE`. Windows Terminal follows its
+hosted shell. Scripts may also redirect streams and explicitly wait for exit.
 
 ## Output and exit codes
 
-Human output includes the target, PID and Restart Manager display name, or
-`(name unavailable)`. Both formats preserve the core's PID/start-time ordering.
-An empty successful list prints `No locking processes found.` and exits 0;
-it does not prove that deletion is possible.
+Human results show the target, PID and available name, with matching resource
+paths below native matches. Names are Restart Manager display names or native
+executable filenames; unavailable names display `(name unavailable)`.
+An empty complete result says `No locking processes found.`. A partial empty
+result says no matching processes were found **in the inspected portion**.
+Neither proves that deletion will succeed.
 
 | Code | Meaning |
 |------|---------|
-| 0 | Inspection completed, with any process count; or help displayed |
-| 1 | Inspection failed, or output could not be written |
+| 0 | Complete inspection with any process count, or help |
+| 1 | Total inspection failure or failure to write otherwise successful output |
 | 2 | Invalid command-line usage |
+| 3 | Partial inspection; usable results may be present but coverage is incomplete |
 
-Human successes/help go to stdout; human failures go to stderr. Parse errors
-always use human text on stderr and leave stdout empty, even with `--json`.
-JSON inspection results, including failures, go only to stdout:
+Human results/help go to stdout. Failures and partial-result warnings go to
+stderr. Parse errors always use human stderr, even with `--json`. JSON results,
+including errors and partial results, use stdout only.
+
+Normal-mode Phase 7 JSON is unchanged:
 
 ```json
 {"path":"C:\\project\\output.dll","status":"success","processes":[{"pid":8420,"name":"Example application"}]}
 ```
 
-`path` and `status` are strings. Success always has a `processes` array, possibly
-empty; each element has numeric `pid` and string `name` (possibly empty).
-Names are display names, not necessarily executable filenames.
+Existing fields retain their types: string `path`/`status`, array `processes`,
+numeric `pid`, string `name`. Normal errors retain `error.category`,
+`native_code`, `stage`, and `cleanup_code`.
 
-```json
-{"path":"C:\\missing.txt","status":"error","error":{"category":"invalid_path","native_code":2,"stage":"validate_path","cleanup_code":0}}
-```
+Deep mode adds process `source` (`restart_manager`, `native_handle_scan`, `both`)
+and a string array `resources`. Restart Manager supplies no detailed resource
+paths, so its resource array is empty unless merged with native matches.
+Deep results also add:
 
-Error categories are `invalid_path`, `access_denied`, `directory_unsupported`,
-and `restart_manager_failure`. Stages are `none`, `validate_path`,
-`start_session`, `register_resource`, `get_list`, and `end_session`.
-`native_code` and `cleanup_code` are numeric Windows codes. Human errors retain
-this context with a readable category. JSON escapes quotes, backslashes, control
-characters and UTF-16 surrogate code units; other Unicode is emitted as UTF-8
-when redirected. No discovery diagnostics are mixed into JSON stdout.
+- `complete`: boolean; false for partial results or errors.
+- `native_scan`: `skipped_process_count`, `skipped_handle_count`, `limit_reached`,
+  `native_code`, `nt_status`, and `stage`.
+- `restart_manager`: `status`, `native_code`, `stage`, and `cleanup_code`.
 
-## API and architecture
+Usable partial JSON keeps `status: "success"`, has `complete: false`, and exits
+3. A total failure has `status: "error"` and exits 1. Automation using `--deep`
+must inspect completeness or the exit code. Numeric `nt_status` preserves raw
+NTSTATUS bits; `native_code` is a Windows error code. Detailed timing/handle
+counts are available in the C++ result for tests, not emitted by the CLI.
 
-`include/lock_inspector.h` declares `InspectLocks(const std::filesystem::path&)`.
-The `wperf_lock_cli` library parses/formats; `wperf_lock_inspector` owns path
-validation, discovery, error mapping, sorting and deduplication. The Windows
-frontend uses `CommandLineToArgvW`, preserving wide paths without ANSI conversion.
-For valid inspection arguments it invokes the core exactly once, prints, and
-exits before common controls, windows, settings or monitoring initialization.
-The existing global monitor constructor is empty and performs no sampling.
+Additional error category: `native_scan_failure`. Native stages are
+`native_snapshot`, `native_resolve_target`, and `native_scan`; existing stages
+remain unchanged. For early validation failures, native scanning is not run;
+the reported code/stage describes validation. All JSON strings correctly escape
+backslashes, quotes, controls, and UTF-16 surrogates.
 
-The core requires an existing absolute Windows path, rejects embedded nulls,
-and registers exactly one resource without resolving symlinks/junctions or
-scanning descendants. Records contain PID, display name and FILETIME start time;
-they are sorted/deduplicated by PID/start time. Duplicate metadata prefers a
-nonempty name, then the lexically first name. Start time is internal and is not
-part of the CLI JSON schema. Processes can exit after the snapshot.
+## API and merge policy
 
-Each invocation uses `RmStartSession`, `RmRegisterResources`, `RmGetList`, and
-`RmEndSession`, linked from Windows SDK `Rstrtmgr.lib`. A noncopyable RAII owner
-ends every started session, including exception paths. Cleanup failure is
-retained separately and becomes an inspection failure if it is the only error.
-The list loop allows one size query and three fill attempts; persistent churn
-returns `ERROR_MORE_DATA` and no partial list. Allocation failures in result
-collection map to `ERROR_OUTOFMEMORY`.
+`InspectLocks(path)` retains the Phase 6/7 behavior. The overload
+`InspectLocks(path, LockInspectionOptions{true})` enables deep inspection.
+The CLI calls the core once and returns before UI or monitoring initialization.
+Path validation, discovery, normalization, ordering and merging belong to the
+core library, not the CLI.
 
-## Limitations and resource policy
+The API distinguishes `Success`, `PartialSuccess`, and backend failures.
+Inaccessible processes, failed duplicates/reopens/queries, or a work limit
+produce partial native results without discarding other matches. Skipped counts
+are conservative: File objects also include pipes/devices which may be skipped
+without being filesystem locks. Metadata failure alone leaves a usable PID.
 
-Restart Manager is the only backend and cannot detect every kind of lock.
-Directories are accepted without recursion, but Restart Manager can reject them
-at list retrieval with access denied, exposed as `directory_unsupported`.
-Descendant-file locks are not searched. See the
-[RmGetList contract](https://learn.microsoft.com/en-us/windows/win32/api/restartmanager/nf-restartmanager-rmgetlist).
-An empty list is not proof that a resource is unlocked.
+A complete native scan can recover Restart Manager's expected
+`DirectoryUnsupported` result. Other Restart Manager failures make the merged
+result partial even if native scanning succeeds. If native scanning fails but
+Restart Manager succeeded, its results survive as partial results. If both
+backends fail, the result is a failure. Both backend errors and RM cleanup
+errors remain available.
 
-There is no deep native handle scanning, Lock Inspector GUI, Explorer integration,
-process termination, arbitrary handle closing, privilege elevation or retry-delete.
-The command never opens or alters another process. Inactive additions are
-**0 threads, 0 timers, 0 polling, 0 process scans**. No persistent inspection
-session/cache exists. Normal desktop behavior is unchanged; the existing app
-has no tray icon.
+Merge uses PID primarily, combines resources/source, and sorts by PID/start time.
+Known different start times are preserved as separate lifetimes and marked
+partial rather than conflated after PID reuse. Unknown start times can merge
+within this one inspection. Resource paths are sorted/deduplicated with ordinal
+Unicode-insensitive comparison and a deterministic lexical tie-break.
+No identities or snapshots persist after a call.
+
+## Native implementation and bounds
+
+The Windows-only backend dynamically resolves `NtQuerySystemInformation`,
+`NtCreateFile`, and `RtlNtStatusToDosError` from `ntdll.dll`; missing APIs fail
+cleanly. The locally isolated x64 `SystemExtendedHandleInformation` layout has
+size/offset assertions. Returned byte lengths/counts are checked before reading.
+The query starts at 1 MiB, allows eight attempts, and caps allocation at 64 MiB.
+Native APIs/layouts can change across Windows versions; see Microsoft's
+[NtQuerySystemInformation documentation](https://learn.microsoft.com/en-us/windows/win32/api/winternl/nf-winternl-ntquerysysteminformation).
+
+A real inspector-owned target handle identifies the current File object type
+index; that handle is excluded from results. Other object types are discarded
+before process access. One successful snapshot is grouped by PID; each process
+is opened once with `PROCESS_DUP_HANDLE`. One duplicate is handled at a time,
+using only `DUPLICATE_SAME_ACCESS`. Optional metadata opens only matching PIDs
+with `PROCESS_QUERY_LIMITED_INFORMATION`.
+
+A duplicate shares the holder's synchronous file-object lock. To avoid waiting
+behind a pending synchronous read, the backend reopens the existing object
+through `NtCreateFile` with `FILE_OPEN`, `FILE_READ_ATTRIBUTES`, full sharing,
+and no synchronous-I/O flags. No file is created or overwritten. This also
+supports directories, which `ReOpenFile` rejected in local testing. Both local
+handles are RAII-owned. Non-disk handles are rejected before querying paths.
+See [NtCreateFile](https://learn.microsoft.com/en-us/windows/win32/api/winternl/nf-winternl-ntcreatefile)
+and [DuplicateHandle](https://learn.microsoft.com/en-us/windows/win32/api/handleapi/nf-handleapi-duplicatehandle).
+
+Path resolution uses `GetFinalPathNameByHandleW` with `FILE_NAME_OPENED`, trying
+NT volume names first, then DOS names. Each form allows three bounded path-buffer
+attempts, up to 32,768 characters. Drive mappings are read once with
+`QueryDosDeviceW`. `NtQueryObject` is not used. See
+[GetFinalPathNameByHandleW](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getfinalpathnamebyhandlew).
+
+Candidate work is capped at 100,000 entries, five seconds checked between calls,
+and roughly one million retained resource characters (plus at most one final
+path). Reaching a limit yields partial results. A single temporary watchdog
+requests cancellation after 100 ms of a candidate's I/O; it uses
+`CancelSynchronousIo` on the scanner's own thread and joins before return.
+`THREAD_TERMINATE` is the access right required by that cancellation API; no
+thread is terminated. Inactive scans create no watchdog.
+
+**These are not hard wall-clock guarantees.** Filesystem drivers may ignore or
+not support cancellation; target opening, RM calls and individual driver calls
+can still block. No thread is abandoned, and no process is killed to enforce a
+deadline. See [CancelSynchronousIo](https://learn.microsoft.com/en-us/windows/win32/api/ioapiset/nf-ioapiset-cancelsynchronousio).
+
+## Paths, directories and permissions
+
+Exact file matching and directory equality/descendants use component boundaries:
+`C:\build` matches `C:\build\a.dll`, but never `C:\builder\a.dll`.
+Deep mode examines open handles rather than enumerating directory contents.
+Both target and candidate paths come from handles. Unicode, spaces, mixed case,
+trailing separators, drive roots, `\\?\` paths and extended UNC prefixes are
+normalized using wide APIs and `CompareStringOrdinal`, without ANSI conversion.
+NT device prefixes use current drive mappings and component boundaries; standard
+MUP prefixes normalize to UNC. Unmapped NT paths remain NT paths.
+
+Junctions/symlinks generally follow the opened target. Full equivalence across
+hard links, short names, alternative mount paths, reparse aliases and volume-GUID
+names is not guaranteed. Per-directory case-sensitive semantics are not modeled.
+UNC normalization is unit-tested; live SMB/network behavior is **NOT VERIFIED**.
+Remote providers may deny metadata access or block during resolution.
+
+Protected/elevated processes, restricted files and handles that disappear during
+the snapshot/duplication/query race are skipped. No privileges are enabled, no
+UAC prompt is requested, and failed reopens never fall back to an unsafe direct
+query of the remote synchronous file object. Empty results are not proof that
+all possible lock types were inspected.
+
+## Resource and security policy
+
+While inactive: **0 handle enumerations, 0 process scans, 0 added threads,
+0 timers, 0 polling**. Normal inspection remains Restart Manager only. Deep
+inspection uses temporary state and one watchdog, releases local resources and
+returns; the CLI then exits. Normal desktop monitoring is intentionally unchanged;
+the existing app has no tray icon.
+
+No process termination, remote handle closing, `DUPLICATE_CLOSE_SOURCE`, shutdown,
+GUI, Explorer integration, elevation, retry-delete or release packaging is added.
+Discovery may temporarily open metadata handles but never changes another
+process's handle table or file contents.
 
 ## Validation
 
-Seven CLI unit cases cover parsing, conflicts, one-call dispatch, exit codes,
-empty results, shared core ordering, names, structured errors and JSON escaping.
-Two process-level CTest entries cover eight scenario groups: help, invalid usage,
-missing-path human/JSON, and held/released-file human/JSON. PowerShell parses JSON
-and verifies field types and Unicode round trips. Each child must exit within
-20 seconds. Tests use their own temporary resources and require no arbitrary
-running applications. The contract entry runs in mandatory CI; real Restart
-Manager resource tests remain opt-in pending hosted-runner verification.
-See [testing.md](testing.md) for commands and validation results.
+The mandatory suite adds 12 native/merge/deep-CLI unit cases to the existing 40.
+Four opt-in native integration cases cover held/released Unicode files,
+directory handles and descendants, extended paths, and a pending synchronous
+pipe read. A further opt-in CLI entry validates deep human/JSON output, merged
+sources/resources, exit codes and released resources with a real JSON parser.
+Real native tests remain opt-in pending GitHub-hosted runner verification.
+See [testing.md](testing.md) for commands and local measurements.

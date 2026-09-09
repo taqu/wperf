@@ -49,7 +49,7 @@ v0.1.0-rc2
 - Window position and update interval persistence
 - On-demand memory purge
 - Always-on-top mode
-- On-demand Lock Inspector: Restart Manager core and human/JSON CLI implemented (Phases 6-7); GUI pending
+- On-demand Lock Inspector: Restart Manager core, human/JSON CLI and explicit native --deep fallback implemented (Phases 6-8); GUI pending
 - Reproducible Release build (CMake + MSVC)
 - Basic Windows CI (build verification)
 - Essential user documentation
@@ -129,10 +129,12 @@ The following criteria must be met before tagging a final release.
 
 ## Lock Inspector Policy
 
-Phases 6-7 implement the discovery-only Restart Manager core and CLI (`wperf.exe --lock <absolute-path> [--json]`). Deep fallback scanning and Lock Inspector GUI are pending. GUI and Explorer
-integration remain pending; deep native scanning, process termination, and
-handle closing are not implemented. Directory inspection is limited by Restart
-Manager and does not scan descendants. See [lock-inspector.md](lock-inspector.md).
+Phases 6-8 implement the discovery-only Restart Manager core, CLI and native
+fallback (`wperf.exe --lock <absolute-path> [--deep] [--json]`). Restart Manager
+remains the default; native scanning is explicit and on demand. Directory
+descendant matching is supported, with partial results for inaccessible
+processes/handles. Lock Inspector GUI, process control and Explorer integration
+remain pending. Remote handle closing is absent. See [lock-inspector.md](lock-inspector.md).
 
 The Lock Inspector feature follows the core lightweight design policy:
 
@@ -141,7 +143,7 @@ The Lock Inspector feature follows the core lightweight design policy:
 - Does not add a background thread while inactive
 - Focuses initially on identifying processes blocking file or directory modification/deletion
 - Uses Windows Restart Manager as the primary detection mechanism
-- On-demand native handle scan may exist as a fallback
+- On-demand native handle scan is implemented through explicit --deep; no automatic elevation
 - Process termination is a later, explicit user action
 - Arbitrary remote handle closing is out of scope for v0.1.0
 - Explorer shell extension integration, if added later, should prefer an external command invocation over a permanently loaded shell-extension DLL

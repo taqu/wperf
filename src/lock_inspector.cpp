@@ -1,4 +1,5 @@
 #include "lock_inspector_internal.h"
+#include "native_handle_backend.h"
 #include <algorithm>
 #include <iterator>
 #include <new>
@@ -158,5 +159,32 @@ LockInspectionResult InspectLocks(const std::filesystem::path& path)
 {
     const detail::LockInspectorApi api{QueryAttributes, RmStartSession, RmRegisterResources, RmGetList, RmEndSession};
     return detail::InspectLocksWithApi(path, api);
+}
+
+LockInspectionResult InspectLocks(const std::filesystem::path& path, const LockInspectionOptions& options)
+{
+    auto primary = InspectLocks(path);
+    if(!options.deep) return primary;
+    // Reuse the existing core's validation. Never enumerate for invalid input.
+    if(primary.stage == LockInspectionStage::ValidatePath || primary.status == LockInspectionStatus::InvalidPath) {
+        primary.deepScan = true;
+        primary.restartManagerStatus = primary.status;
+        primary.restartManagerError = primary.nativeError;
+        primary.restartManagerStage = primary.stage;
+        return primary;
+    }
+    try {
+        return detail::MergeLockResults(primary, detail::InspectNativeHandles(path));
+    } catch(const std::bad_alloc&) {
+        primary.deepScan = true;
+        primary.restartManagerStatus = primary.status;
+        primary.restartManagerError = primary.nativeError;
+        primary.restartManagerStage = primary.stage;
+        primary.status = primary.status == LockInspectionStatus::Success
+            ? LockInspectionStatus::PartialSuccess : LockInspectionStatus::NativeScanFailure;
+        primary.nativeError = ERROR_OUTOFMEMORY;
+        primary.stage = LockInspectionStage::NativeScan;
+        return primary;
+    }
 }
 } // namespace wperf

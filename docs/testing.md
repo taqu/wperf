@@ -133,3 +133,52 @@ restored the standard MSVC flags. GitHub-hosted CI: **NOT VERIFIED**.
 A hidden no-argument Release startup smoke test found the normal wperf window
 and closed it through WM_CLOSE with exit code 0. Visual rendering and menu
 interaction were not manually verified. The app has no existing tray icon.
+
+## Phase 8 native handle scan validation (2026-09-09)
+
+Configured a new build tree with:
+
+```powershell
+cmake -S . -B build-phase8 -A x64 -DWPERF_BUILD_INTEGRATION_TESTS=ON
+cmake --build build-phase8 --config Debug --parallel
+cmake --build build-phase8 --config Release --parallel
+ctest --test-dir build-phase8 -C Debug --output-on-failure --no-tests=error
+ctest --test-dir build-phase8 -C Release --output-on-failure --no-tests=error
+```
+
+Debug and Release builds: **PASS**, with `/W4 /WX /permissive- /utf-8` unchanged.
+Both test suites: **PASS**, all five CTest entries. The mandatory unit suite now
+has 52 cases, including 12 new path/native/merge/deep-CLI cases. The existing
+integration executable now has seven cases (three RM, four native); a new
+`wperf.cli_deep` entry checks deep CLI Unicode human/JSON output, source/resource
+merging, complete/partial exit codes and released handles with a real JSON parser.
+Existing normal CLI tests also passed. Native integration remains opt-in through
+`WPERF_BUILD_INTEGRATION_TESTS`; no additional workflow was added. Deterministic
+native unit tests and extended CLI argument tests run in the existing default CI.
+
+Functional checks passed: held exact file, directory itself and descendant file,
+released/no-match case, Unicode/spaces, extended paths, partial inaccessible
+process handling and a synchronous pipe reader. Injected tests cover inaccessible
+processes and raced handles without requiring protected-process access. All
+created test resources/handles are cleaned up by their owners on normal completion.
+Windows API integration tests ran outside the development sandbox because
+Restart Manager needs session bookkeeping that it blocks.
+
+Representative Release observation from the final suite (not a benchmark):
+594 ms, 295,976 system handles, 20,131 File candidates, 13,009 resolved handles,
+17 skipped processes, one matching process. Six observed scans ranged from
+562 to 640 ms. Global activity naturally changes these counts. Native skipped
+handle counts are conservative and include non-disk File objects and metadata
+reopen failures; these scans correctly report partial coverage.
+
+Development initially exposed long waits when querying duplicated synchronous
+handles directly. The final backend uses independent metadata-only asynchronous
+reopens and a single temporary cancellation watchdog. Controlled pipe-read tests
+now pass. There is still no hard driver-independent wall-clock guarantee; see
+[lock-inspector.md](lock-inspector.md) for bounds and limitations.
+
+Normal desktop startup/monitoring/settings/shutdown were not manually retested
+in Phase 8; the desktop startup path is unchanged and scanning is only dispatched
+for explicit deep inspection. The existing application has no tray icon.
+UNC/SMB live access and full reparse/alias equivalence: **NOT VERIFIED**.
+GitHub-hosted CI: **NOT VERIFIED**.

@@ -12,6 +12,7 @@ struct Options
     Mode mode = Mode::Desktop;
     std::wstring path;
     bool json = false;
+    bool deep = false;
     std::wstring error;
 };
 struct Output
@@ -23,7 +24,8 @@ struct Output
 // Arguments exclude the executable name. Discovery and path validation stay in the core.
 Options Parse(std::span<const std::wstring_view> arguments);
 using Inspector = LockInspectionResult (*)(const std::filesystem::path&);
-Output Run(const Options& options, Inspector inspect = InspectLocks);
+LockInspectionResult InspectDeep(const std::filesystem::path& path);
+Output Run(const Options& options, Inspector inspect = InspectLocks, Inspector deepInspect = InspectDeep);
 // Returns -1 for ordinary desktop startup; otherwise the command's exit code.
 int DispatchCommandLine();
 }

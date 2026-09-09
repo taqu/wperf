@@ -1,6 +1,6 @@
 # wperf Project Baseline
 
-Repository baseline. Last updated 2026-09-09 (Phase 7 Lock Inspector CLI).
+Repository baseline. Last updated 2026-09-09 (Phase 8 native handle fallback).
 
 ---
 
@@ -68,7 +68,7 @@ CMake target `wperf_lock_inspector` compiles `src/lock_inspector.cpp`, links
 
 Discovery uses Restart Manager sessions with RAII cleanup and bounded list
 retries. Phase 7 adds `wperf.exe --lock <absolute-path> [--json]` and `--help` through a small CLI frontend. There is no Lock Inspector GUI,
-Explorer integration, deep handle scan, process termination, or handle closing.
+Explorer integration, process termination, or remote handle closing. Phase 8 adds explicit `--deep`: Restart Manager first, then a bounded native handle snapshot and result merge. Directory handles/descendants, Unicode path normalization and partial results are supported; protected processes remain limited. Native scanning is dormant unless requested.
 Files and directories are accepted as absolute wide paths; directory discovery
 is limited and does not recurse. Inactive inspection adds zero threads, timers,
 polling, or process scans. See [lock-inspector.md](lock-inspector.md).
@@ -85,7 +85,7 @@ polling, or process scans. See [lock-inspector.md](lock-inspector.md).
 
 ### Core Design Policy
 
-Features requiring non-trivial CPU usage, memory usage, handle enumeration, process inspection, or other expensive system operations must be activated on demand and must not introduce unnecessary background polling when inactive. The memory purge feature follows this policy. The future Lock Inspector feature must also follow this policy.
+Features requiring non-trivial CPU usage, memory usage, handle enumeration, process inspection, or other expensive system operations must be activated on demand and must not introduce unnecessary background polling when inactive. The memory purge feature follows this policy. Lock Inspector follows the same policy; its native scan and temporary I/O watchdog run only with explicit deep inspection.
 
 ---
 
@@ -193,7 +193,7 @@ Production dependencies remain Windows SDK libraries. Tests additionally use the
 | On-demand memory purge | Confirmed |
 | Right-click context menu | Confirmed |
 | System tray icon | Not present |
-| Lock Inspector | Restart Manager core and on-demand CLI implemented; human/JSON output; no process control |
+| Lock Inspector | Restart Manager plus optional native --deep scan; directory descendants; human/JSON output; no process control |
 
 ---
 
@@ -218,7 +218,7 @@ maintain or integrate. CI previously performed build/artifact checks only.
 
 `tests/CMakeLists.txt` builds `wperf_tests` by default (`BUILD_TESTING=OFF` disables
 it). CTest registers `wperf.unit` with the `unit` label and a 30-second timeout.
-The 40 doctest cases include seven CLI cases, the original 18 formatting/settings/CPU cases and
+The 52 doctest cases include 12 native/deep cases and seven CLI cases, the original 18 formatting/settings/CPU cases and
 15 Lock Inspector cases covering validation, errors, conversion, deduplication,
 races, retries, and session cleanup. Small inline helpers extracted into
 `include/app_logic.h` are shared by production and tests.
@@ -230,13 +230,13 @@ ctest --test-dir build -C Release --output-on-failure --no-tests=error
 
 Phase 6 clean validation results and commands are recorded in [testing.md](testing.md).
 Mandatory unit tests use only in-memory inputs. Mandatory CLI contract tests launch the executable and check help, invalid usage and nonexistent-path errors with strict JSON parsing. The separate
-`wperf_lock_integration_tests` target has three controlled-resource cases and
+`wperf_lock_integration_tests` target has seven controlled-resource cases (three Restart Manager and four native) and
 requires `WPERF_BUILD_INTEGRATION_TESTS=ON`. It carries the `integration` label
 and is excluded from default CI pending GitHub-runner verification.
 
 Major gaps: INI persistence/missing-key handling, executable path construction,
 UI interactions, live metrics and GPU hardware, startup/shutdown, and memory
-purge. Lock Inspector deep scanning and GUI tests remain future work. CLI contract tests run by default; held/released-resource CLI tests are opt-in with the existing integration option.
+purge. Lock Inspector GUI tests remain future work. Native handle and deep-CLI integration tests are opt-in pending hosted-runner verification. CLI contract tests run by default; held/released-resource CLI tests are opt-in with the existing integration option.
 See [testing.md](testing.md) for exact validation commands and isolation details.
 
 ---

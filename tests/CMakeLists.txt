@@ -1,7 +1,7 @@
 add_library(wperf_doctest INTERFACE)
 target_include_directories(wperf_doctest SYSTEM INTERFACE third_party)
 
-add_executable(wperf_tests test_app_logic.cpp test_lock_inspector.cpp test_lock_cli.cpp)
+add_executable(wperf_tests test_app_logic.cpp test_lock_inspector.cpp test_lock_cli.cpp test_native_handles.cpp)
 target_include_directories(wperf_tests PRIVATE ${SOURCE_DIR})
 target_link_libraries(wperf_tests PRIVATE wperf_doctest wperf_lock_cli)
 target_compile_options(wperf_tests PRIVATE /W4 /WX /permissive- /utf-8)
@@ -16,6 +16,9 @@ set_tests_properties(wperf.cli_contract PROPERTIES LABELS integration TIMEOUT 15
 
 option(WPERF_BUILD_INTEGRATION_TESTS "Build opt-in Windows Restart Manager tests" OFF)
 if(WPERF_BUILD_INTEGRATION_TESTS)
+    add_test(NAME wperf.cli_deep COMMAND ${WPERF_POWERSHELL} -NoProfile -ExecutionPolicy Bypass
+        -File ${CMAKE_CURRENT_SOURCE_DIR}/test_lock_cli_integration.ps1 -Executable $<TARGET_FILE:wperf> -Deep)
+    set_tests_properties(wperf.cli_deep PROPERTIES LABELS integration TIMEOUT 90)
     add_test(NAME wperf.cli_resources COMMAND ${WPERF_POWERSHELL} -NoProfile -ExecutionPolicy Bypass
         -File ${CMAKE_CURRENT_SOURCE_DIR}/test_lock_cli_integration.ps1 -Executable $<TARGET_FILE:wperf> -Resources)
     set_tests_properties(wperf.cli_resources PROPERTIES LABELS integration TIMEOUT 100)

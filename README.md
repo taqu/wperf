@@ -96,7 +96,7 @@ If `wperf.exe` is placed in a write-protected directory such as `C:\Program File
 
 ## Roadmap
 
-The initial on-demand **Lock Inspector CLI** uses Windows Restart Manager: `wperf.exe --lock "C:\project\output.dll" [--json]`. It supports Unicode paths and adds no background polling while inactive. Detection has coverage limitations, especially for directories; no Lock Inspector GUI or process control is available. See [implementation status and limitations](docs/lock-inspector.md).
+The initial on-demand **Lock Inspector CLI** uses Windows Restart Manager: `wperf.exe --lock "C:\project\output.dll" [--deep] [--json]`. Optional `--deep` adds native handle discovery, including directory descendants. Unicode paths are supported, with no background scanning while inactive. Protected processes and path aliases limit coverage; no Lock Inspector GUI or process control is available. See [implementation status and limitations](docs/lock-inspector.md).
 
 See [docs/roadmap.md](docs/roadmap.md) for the full development roadmap.
 

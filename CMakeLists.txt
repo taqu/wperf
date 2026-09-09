@@ -42,6 +42,10 @@ add_library(wperf_lock_inspector STATIC
     ${HEADER_DIR}/lock_inspector.h
     ${SOURCE_DIR}/lock_inspector_internal.h
     ${SOURCE_DIR}/lock_inspector.cpp
+    ${SOURCE_DIR}/native_handle_backend.h
+    ${SOURCE_DIR}/native_handle_backend.cpp
+    ${SOURCE_DIR}/lock_path.cpp
+    ${SOURCE_DIR}/lock_result_merge.cpp
 )
 target_include_directories(wperf_lock_inspector PUBLIC ${HEADER_DIR})
 target_compile_options(wperf_lock_inspector PRIVATE /W4 /WX /permissive- /utf-8)

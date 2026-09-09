@@ -1,4 +1,4 @@
-﻿param([Parameter(Mandatory=$true)][string]$Executable, [switch]$Resources)
+﻿param([Parameter(Mandatory=$true)][string]$Executable, [switch]$Resources, [switch]$Deep)
 $ErrorActionPreference = 'Stop'
 function Check($condition, $message) { if (-not $condition) { throw $message } }
 function Run-Cli([string]$arguments) {
@@ -19,10 +19,11 @@ function Run-Cli([string]$arguments) {
         return @{ Code = $process.ExitCode; Out = $stdout.Result; Err = $stderr.Result }
     } finally { $process.Dispose() }
 }
+if ($Deep) { $Resources = $true }
 if (-not $Resources) {
     $result = Run-Cli '--help'
     Check ($result.Code -eq 0 -and $result.Out.Contains('--lock') -and $result.Err -eq '') 'help'
-    foreach ($arguments in @('--lock', '--unknown-option', '--json', '--lock ""', '--lock "C:\file" --help')) {
+    foreach ($arguments in @('--lock', '--unknown-option', '--json', '--deep', '--lock "C:\file" --deep --deep', '--lock ""', '--lock "C:\file" --help')) {
         $result = Run-Cli $arguments
         Check ($result.Code -eq 2 -and $result.Out -eq '' -and $result.Err.Length -gt 0) "invalid usage: $arguments"
     }
@@ -38,6 +39,28 @@ if (-not $Resources) {
 }
 $file = Join-Path ([System.IO.Path]::GetTempPath()) ([guid]::NewGuid().ToString() + ' lock 日本.txt')
 $handle = [System.IO.File]::Open($file, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::Read)
+if ($Deep) {
+    try {
+        $result = Run-Cli "--lock `"$file`" --deep --json"
+        $json = ConvertFrom-Json -InputObject $result.Out
+        Check (($result.Code -eq 0 -or $result.Code -eq 3) -and $result.Err -eq '' -and $json.status -eq 'success' -and $json.path -ceq $file) 'deep JSON result'
+        Check ($json.complete -is [bool] -and $json.native_scan.native_code -eq 0 -and -not $json.native_scan.limit_reached) 'deep completeness'
+        Check (($result.Code -eq 0) -eq $json.complete) 'deep exit code matches completeness'
+        $self = @($json.processes | Where-Object { $_.pid -eq $PID })
+        Check ($self.Count -eq 1 -and $self[0].source -eq 'both' -and $self[0].resources -is [array] -and $self[0].resources -contains $file) 'deep merged resource'
+        $result = Run-Cli "--lock `"$file`" --deep"
+        Check (($result.Code -eq 0 -or $result.Code -eq 3) -and $result.Out.Contains([string]$PID) -and $result.Out.Contains($file)) 'deep human result'
+        $handle.Dispose()
+        $result = Run-Cli "--lock `"$file`" --deep --json"
+        $json = ConvertFrom-Json -InputObject $result.Out
+        Check (($result.Code -eq 0 -or $result.Code -eq 3) -and $json.processes -is [array] -and $json.processes.Count -eq 0) 'deep released'
+        Write-Output 'Deep CLI held/released Unicode human/JSON cases passed.'
+    } finally {
+        $handle.Dispose()
+        [System.IO.File]::Delete($file)
+    }
+    exit 0
+}
 try {
     $result = Run-Cli "--lock `"$file`" --json"
     $json = ConvertFrom-Json -InputObject $result.Out
