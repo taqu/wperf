@@ -16,19 +16,19 @@ namespace wperf
 namespace
 {
     constexpr wchar_t ClassName[] = L"wperfLockInspector";
-    constexpr int PathEdit = 4101;
-    constexpr int BrowseFile = 4102;
-    constexpr int BrowseFolder = 4103;
-    constexpr int Inspect = IDOK;
-    constexpr int DeepScan = 4105;
-    constexpr int ResultList = 4106;
-    constexpr int StatusLabel = 4107;
-    constexpr int Refresh = 4108;
-    constexpr int CloseNormallyButton = 4109;
-    constexpr int ForceTerminateButton = 4110;
-    constexpr int Close = IDCANCEL;
-    constexpr int MinimumWidth = 680;
-    constexpr int MinimumHeight = 430;
+    constexpr int32_t PathEdit = 4101;
+    constexpr int32_t BrowseFile = 4102;
+    constexpr int32_t BrowseFolder = 4103;
+    constexpr int32_t Inspect = IDOK;
+    constexpr int32_t DeepScan = 4105;
+    constexpr int32_t ResultList = 4106;
+    constexpr int32_t StatusLabel = 4107;
+    constexpr int32_t Refresh = 4108;
+    constexpr int32_t CloseNormallyButton = 4109;
+    constexpr int32_t ForceTerminateButton = 4110;
+    constexpr int32_t Close = IDCANCEL;
+    constexpr int32_t MinimumWidth = 680;
+    constexpr int32_t MinimumHeight = 430;
 
     struct ScanCompletion;
     struct ActionCompletion;
@@ -48,7 +48,7 @@ namespace
         bool scanning = false;
         bool lastDeep = false;
         bool actionActive = false;
-        int selectedRow = -1;
+        int32_t selectedRow = -1;
         std::vector<ProcessIdentity> identities;
         std::wstring selectedName;
         std::wstring actionFeedback;
@@ -79,16 +79,142 @@ namespace
         bool force = false;
     };
 
-    int Scale(HWND window, int value)
+    struct ModernButtonConfig
+    {
+        COLORREF bgColorNormal;  // Normal bg color
+        COLORREF bgColorDisabled; // Disabled bg color
+        COLORREF bgColorHover;   // Hover bg color
+        COLORREF bgColorPressed; // Click bg color
+        COLORREF textColor;      // Text color
+        COLORREF textColorDisabled; // Text disabled color
+    };
+
+    struct ButtonState
+    {
+        ModernButtonConfig config;
+        bool isHovered;
+    };
+
+    int32_t Scale(HWND window, int32_t value)
     {
         HDC dc = GetDC(window);
-        const int dpi = dc ? GetDeviceCaps(dc, LOGPIXELSX) : 96;
+        const int32_t dpi = dc ? GetDeviceCaps(dc, LOGPIXELSX) : 96;
         if(dc)
             ReleaseDC(window, dc);
         return MulDiv(value, dpi, 96);
     }
 
-    void SetControlFont(HWND parent, int identifier, HFONT font)
+    /**
+     * @brief Custom button message proc
+     * @param hWnd
+     * @param uMsg
+     * @param wParam
+     * @param lParam
+     * @param uIdSubclass
+     * @param dwRefData
+     * @return
+     */
+    LRESULT CALLBACK ModernButtonSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR /*dwRefData*/)
+    {
+        // Get user data
+        ButtonState* pState = reinterpret_cast<ButtonState*>(GetWindowLongPtr(hWnd, GWLP_USERDATA));
+        switch(uMsg) {
+        case WM_MOUSEMOVE:
+            if(pState && !pState->isHovered) {
+                pState->isHovered = true;
+
+                // When mouse left
+                TRACKMOUSEEVENT tme = {sizeof(TRACKMOUSEEVENT)};
+                tme.dwFlags = TME_LEAVE;
+                tme.hwndTrack = hWnd;
+                TrackMouseEvent(&tme);
+                InvalidateRect(hWnd, NULL, FALSE); // Request redrawing
+            }
+            break;
+
+        case WM_MOUSELEAVE:
+            if(pState) {
+                pState->isHovered = false;
+                InvalidateRect(hWnd, NULL, FALSE); // Request redrawing
+            }
+            break;
+
+        case WM_NCDESTROY:
+            // When mouse was destroied
+            if(pState) {
+                delete pState;
+                SetWindowLongPtr(hWnd, GWLP_USERDATA, 0);
+            }
+            RemoveWindowSubclass(hWnd, ModernButtonSubclassProc, uIdSubclass);
+            break;
+        }
+
+        return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+    }
+
+    /**
+     * @brief Make mouse custom state
+     * @param hButton
+     * @param config
+     */
+    void MakeButtonModern(HWND hButton, const ModernButtonConfig& config)
+    {
+        // Set owner draw
+        LONG_PTR style = GetWindowLongPtr(hButton, GWL_STYLE);
+        SetWindowLongPtr(hButton, GWL_STYLE, style | BS_OWNERDRAW);
+
+        // Add specific state
+        ButtonState* pState = new ButtonState();
+        pState->config = config;
+        pState->isHovered = false;
+        SetWindowLongPtr(hButton, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(pState));
+
+        // Set specific window proc
+        SetWindowSubclass(hButton, ModernButtonSubclassProc, 0, 0);
+    }
+
+    /**
+     * @brief Draw custom button
+     * @param lpDrawItem 
+     * @param config 
+     * @param isHovered 
+     */
+    void DrawModernButton(LPDRAWITEMSTRUCT lpDrawItem, const ModernButtonConfig& config)
+{
+    HDC hdc = lpDrawItem->hDC;
+    RECT rect = lpDrawItem->rcItem;
+
+    // Get button state
+    bool isPressed = (lpDrawItem->itemState & ODS_SELECTED);
+    bool isDisabled = (lpDrawItem->itemState & ODS_DISABLED);
+
+    COLORREF finalBgColor = config.bgColorNormal;
+    if (isDisabled) {
+        finalBgColor = config.bgColorDisabled;
+    } else if (isPressed) {
+        finalBgColor = config.bgColorPressed;
+    }
+
+    // Draw bg
+    HBRUSH hBrush = CreateSolidBrush(finalBgColor);
+    FillRect(hdc, &rect, hBrush);
+    DeleteObject(hBrush);
+
+    // Draw text
+    SetBkMode(hdc, TRANSPARENT);
+    if (isDisabled) {
+        SetTextColor(hdc, config.textColorDisabled);
+    } else {
+        SetTextColor(hdc, config.textColor);
+    }
+
+    static constexpr int32_t BufferSize = 32; 
+    TCHAR szText[BufferSize];
+    GetWindowText(lpDrawItem->hwndItem, szText, BufferSize);
+    DrawText(hdc, szText, -1, &rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+}
+
+    void SetControlFont(HWND parent, int32_t identifier, HFONT font)
     {
         SendDlgItemMessageW(parent, identifier, WM_SETFONT, reinterpret_cast<WPARAM>(font), TRUE);
     }
@@ -110,18 +236,18 @@ namespace
     {
         RECT area{};
         GetClientRect(window, &area);
-        const int margin = Scale(window, 14);
-        const int gap = Scale(window, 8);
-        const int controlHeight = Scale(window, 27);
-        const int browseWidth = Scale(window, 92);
-        const int buttonWidth = Scale(window, 92);
-        const int actionWidth = Scale(window, 128);
-        const int labelHeight = Scale(window, 20);
-        int y = margin;
+        const int32_t margin = Scale(window, 14);
+        const int32_t gap = Scale(window, 8);
+        const int32_t controlHeight = Scale(window, 27);
+        const int32_t browseWidth = Scale(window, 92);
+        const int32_t buttonWidth = Scale(window, 92);
+        const int32_t actionWidth = Scale(window, 128);
+        const int32_t labelHeight = Scale(window, 20);
+        int32_t y = margin;
         MoveWindow(GetDlgItem(window, 4199), margin, y + Scale(window, 4), Scale(window, 38), labelHeight, TRUE);
-        const int editX = margin + Scale(window, 42);
-        const int folderX = area.right - margin - browseWidth;
-        const int fileX = folderX - gap - browseWidth;
+        const int32_t editX = margin + Scale(window, 42);
+        const int32_t folderX = area.right - margin - browseWidth;
+        const int32_t fileX = folderX - gap - browseWidth;
         MoveWindow(GetDlgItem(window, PathEdit), editX, y, fileX - gap - editX, controlHeight, TRUE);
         MoveWindow(GetDlgItem(window, BrowseFile), fileX, y, browseWidth, controlHeight, TRUE);
         MoveWindow(GetDlgItem(window, BrowseFolder), folderX, y, browseWidth, controlHeight, TRUE);
@@ -133,15 +259,15 @@ namespace
         y += controlHeight + Scale(window, 14);
         MoveWindow(GetDlgItem(window, 4197), margin, y, area.right - 2 * margin, labelHeight, TRUE);
         y += labelHeight + Scale(window, 4);
-        const int bottomY = area.bottom - margin - controlHeight;
-        const int statusY = bottomY - gap - labelHeight;
+        const int32_t bottomY = area.bottom - margin - controlHeight;
+        const int32_t statusY = bottomY - gap - labelHeight;
         MoveWindow(GetDlgItem(window, ResultList), margin, y, area.right - 2 * margin, statusY - gap - y, TRUE);
         HWND list = GetDlgItem(window, ResultList);
-        const int processWidth = Scale(window, 180);
-        const int pidWidth = Scale(window, 80);
-        const int minimumResourceWidth = Scale(window, 160);
-        const int availableResourceWidth = static_cast<int>(area.right) - 2 * margin - processWidth - pidWidth - Scale(window, 6);
-        const int resourceWidth = availableResourceWidth > minimumResourceWidth
+        const int32_t processWidth = Scale(window, 180);
+        const int32_t pidWidth = Scale(window, 80);
+        const int32_t minimumResourceWidth = Scale(window, 160);
+        const int32_t availableResourceWidth = static_cast<int32_t>(area.right) - 2 * margin - processWidth - pidWidth - Scale(window, 6);
+        const int32_t resourceWidth = availableResourceWidth > minimumResourceWidth
                                       ? availableResourceWidth
                                       : minimumResourceWidth;
         ListView_SetColumnWidth(list, 0, processWidth);
@@ -319,7 +445,7 @@ namespace
     {
         if(state.scanning)
             return;
-        const int length = GetWindowTextLengthW(GetDlgItem(window, PathEdit));
+        const int32_t length = GetWindowTextLengthW(GetDlgItem(window, PathEdit));
         std::wstring path(static_cast<size_t>(length) + 1, L'\0');
         GetDlgItemTextW(window, PathEdit, path.data(), length + 1);
         path.resize(static_cast<size_t>(length));
@@ -369,9 +495,9 @@ namespace
             const auto& row = view.rows[index];
             LVITEMW item{};
             item.mask = LVIF_TEXT;
-            item.iItem = static_cast<int>(index);
+            item.iItem = static_cast<int32_t>(index);
             item.pszText = const_cast<wchar_t*>(row.process.c_str());
-            const int actual = ListView_InsertItem(list, &item);
+            const int32_t actual = ListView_InsertItem(list, &item);
             const std::wstring pid = std::to_wstring(row.pid);
             ListView_SetItemText(list, actual, 1, const_cast<wchar_t*>(pid.c_str()));
             ListView_SetItemText(list, actual, 2, const_cast<wchar_t*>(row.resource.c_str()));
@@ -414,17 +540,19 @@ namespace
                                       DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                                       CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
             const HINSTANCE instance = GetModuleHandleW(nullptr);
+
             CreateWindowExW(0, L"STATIC", L"Path:", WS_CHILD | WS_VISIBLE, 0, 0, 0, 0, window,
                             reinterpret_cast<HMENU>(static_cast<INT_PTR>(4199)), instance, nullptr);
             CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL,
                             0, 0, 0, 0, window, reinterpret_cast<HMENU>(static_cast<INT_PTR>(PathEdit)), instance, nullptr);
-            CreateWindowExW(0, L"BUTTON", L"Browse File", WS_CHILD | WS_VISIBLE | WS_TABSTOP,
+            CreateWindowExW(0, L"BUTTON", L"Browse File", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW,
                             0, 0, 0, 0, window, reinterpret_cast<HMENU>(static_cast<INT_PTR>(BrowseFile)), instance, nullptr);
-            CreateWindowExW(0, L"BUTTON", L"Browse Folder", WS_CHILD | WS_VISIBLE | WS_TABSTOP,
+
+            CreateWindowExW(0, L"BUTTON", L"Browse Folder", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW,
                             0, 0, 0, 0, window, reinterpret_cast<HMENU>(static_cast<INT_PTR>(BrowseFolder)), instance, nullptr);
-            CreateWindowExW(0, L"BUTTON", L"Inspect", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_DEFPUSHBUTTON,
+            CreateWindowExW(0, L"BUTTON", L"Inspect", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_DEFPUSHBUTTON | BS_OWNERDRAW,
                             0, 0, 0, 0, window, reinterpret_cast<HMENU>(static_cast<INT_PTR>(Inspect)), instance, nullptr);
-            CreateWindowExW(0, L"BUTTON", L"Deep Scan", WS_CHILD | WS_VISIBLE | WS_TABSTOP,
+            CreateWindowExW(0, L"BUTTON", L"Deep Scan", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW,
                             0, 0, 0, 0, window, reinterpret_cast<HMENU>(static_cast<INT_PTR>(DeepScan)), instance, nullptr);
             CreateWindowExW(0, L"STATIC", L"Deep Scan checks system file handles and may take longer.",
                             WS_CHILD | WS_VISIBLE, 0, 0, 0, 0, window,
@@ -452,17 +580,17 @@ namespace
             CreateWindowExW(0, L"STATIC", L"Ready.", WS_CHILD | WS_VISIBLE,
                             0, 0, 0, 0, window,
                             reinterpret_cast<HMENU>(static_cast<INT_PTR>(StatusLabel)), instance, nullptr);
-            CreateWindowExW(0, L"BUTTON", L"Refresh", WS_CHILD | WS_VISIBLE | WS_TABSTOP,
+            CreateWindowExW(0, L"BUTTON", L"Refresh", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW,
                             0, 0, 0, 0, window, reinterpret_cast<HMENU>(static_cast<INT_PTR>(Refresh)), instance, nullptr);
-            CreateWindowExW(0, L"BUTTON", L"Close Normally", WS_CHILD | WS_VISIBLE | WS_TABSTOP,
+            CreateWindowExW(0, L"BUTTON", L"Close Normally", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW,
                             0, 0, 0, 0, window, reinterpret_cast<HMENU>(static_cast<INT_PTR>(CloseNormallyButton)), instance, nullptr);
-            CreateWindowExW(0, L"BUTTON", L"Force Terminate", WS_CHILD | WS_VISIBLE | WS_TABSTOP,
+            CreateWindowExW(0, L"BUTTON", L"Force Terminate", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW,
                             0, 0, 0, 0, window, reinterpret_cast<HMENU>(static_cast<INT_PTR>(ForceTerminateButton)), instance, nullptr);
-            CreateWindowExW(0, L"BUTTON", L"Close", WS_CHILD | WS_VISIBLE | WS_TABSTOP,
+            CreateWindowExW(0, L"BUTTON", L"Close", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW,
                             0, 0, 0, 0, window, reinterpret_cast<HMENU>(static_cast<INT_PTR>(Close)), instance, nullptr);
-            const int controls[] = {4199, PathEdit, BrowseFile, BrowseFolder, Inspect, DeepScan, 4198,
+            const int32_t controls[] = {4199, PathEdit, BrowseFile, BrowseFolder, Inspect, DeepScan, 4198,
                                     4197, ResultList, StatusLabel, Refresh, CloseNormallyButton, ForceTerminateButton, Close};
-            for(int identifier: controls) SetControlFont(window, identifier, state->font);
+            for(int32_t identifier: controls) SetControlFont(window, identifier, state->font);
             Layout(window);
             UpdateActionControls(window, *state);
             return 0;
@@ -542,11 +670,36 @@ namespace
             EndPaint(window, &paint);
             return 0;
         }
+        case WM_DRAWITEM: {
+            LPDRAWITEMSTRUCT lpDrawItem = (LPDRAWITEMSTRUCT)lParam;
+            if(lpDrawItem->CtlType == ODT_BUTTON) {
+                // Light gray button
+                ModernButtonConfig lightGrayTheme = {
+                    RGB(220, 220, 220), // Normal
+                    RGB(220, 220, 220), // Disabled
+                    RGB(160, 160, 160), // Hover
+                    RGB(255, 255, 255), // Click
+                    RGB(0, 0, 0),        // Text
+                    RGB(160, 160, 160) // Text disabled
+                };
+
+                    DrawModernButton(lpDrawItem, lightGrayTheme);
+                    return TRUE;
+            }
+        } break;
         case WM_ERASEBKGND: {
             RECT area{};
             GetClientRect(window, &area);
             FillRect(reinterpret_cast<HDC>(wParam), &area, state->background);
             return 1;
+        }
+        case WM_NCHITTEST: {
+            // Allows the user to click and drag the borderless window from anywhere
+            LRESULT hit = DefWindowProcW(window, message, wParam, lParam);
+            if(hit == HTCLIENT) {
+                return HTCAPTION;
+            }
+            return hit;
         }
         case WM_CLOSE:
             DestroyWindow(window);
@@ -571,7 +724,7 @@ namespace
     }
 } // namespace
 
-int RunLockInspectorGui(HINSTANCE instance, int showCommand, std::wstring_view initialPath)
+int32_t RunLockInspectorGui(HINSTANCE instance, HWND parent, int32_t showCommand, std::wstring_view initialPath)
 {
     INITCOMMONCONTROLSEX controls{sizeof(controls), ICC_LISTVIEW_CLASSES | ICC_STANDARD_CLASSES};
     InitCommonControlsEx(&controls);
@@ -584,15 +737,34 @@ int RunLockInspectorGui(HINSTANCE instance, int showCommand, std::wstring_view i
     windowClass.hIcon = LoadIconW(instance, MAKEINTRESOURCEW(IDI_ICON_MAIN));
     windowClass.hCursor = LoadCursorW(nullptr, IDC_ARROW);
     windowClass.lpszClassName = ClassName;
-    if(!RegisterClassExW(&windowClass) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
+    if(!RegisterClassExW(&windowClass) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS){
         return 1;
+    }
+
+    const int32_t windowWidth = Scale(nullptr, MinimumWidth);
+    const int32_t windowHeight = Scale(nullptr, MinimumHeight);
+    int32_t x = CW_USEDEFAULT;
+    int32_t y = CW_USEDEFAULT;
+    if(parent && IsWindow(parent)) {
+        RECT parentRect{};
+        GetWindowRect(parent, &parentRect);
+        x = parentRect.left + ((parentRect.right - parentRect.left) - windowWidth) / 2;
+        y = parentRect.top + ((parentRect.bottom - parentRect.top) - windowHeight) / 2;
+        MONITORINFO monitorInfo{sizeof(MONITORINFO)};
+        if(GetMonitorInfoW(MonitorFromWindow(parent, MONITOR_DEFAULTTONEAREST), &monitorInfo)) {
+            const RECT& work = monitorInfo.rcWork;
+            const int32_t maxX = work.right - windowWidth;
+            const int32_t maxY = work.bottom - windowHeight;
+            x = x < work.left ? work.left : (x > maxX ? maxX : x);
+            y = y < work.top ? work.top : (y > maxY ? maxY : y);
+        }
+    }
 
     auto state = std::make_shared<WindowState>();
     auto holder = std::make_unique<std::shared_ptr<WindowState>>(state);
     auto* holderPointer = holder.get();
-    HWND window = CreateWindowExW(WS_EX_APPWINDOW, ClassName, L"wperf Lock Inspector",
-                                  WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT,
-                                  Scale(nullptr, MinimumWidth), Scale(nullptr, MinimumHeight),
+    HWND window = CreateWindowExW(WS_EX_TOOLWINDOW, ClassName, ClassName,
+                                  WS_POPUP | WS_SYSMENU | WS_MINIMIZEBOX, x, y, windowWidth, windowHeight,
                                   nullptr, nullptr, instance, holder.get());
     if(!window)
         return 1;

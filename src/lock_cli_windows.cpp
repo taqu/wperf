@@ -24,8 +24,8 @@ bool Write(HANDLE handle, std::wstring_view value)
         }
         return true;
     }
-    const int count = static_cast<int>(value.size());
-    const int size = WideCharToMultiByte(CP_UTF8, 0, value.data(), count, nullptr, 0, nullptr, nullptr);
+    const int32_t count = static_cast<int32_t>(value.size());
+    const int32_t size = WideCharToMultiByte(CP_UTF8, 0, value.data(), count, nullptr, 0, nullptr, nullptr);
     if(size == 0) return false;
     std::string bytes(static_cast<size_t>(size), '\0');
     if(!WideCharToMultiByte(CP_UTF8, 0, value.data(), count, bytes.data(), size, nullptr, nullptr)) return false;
@@ -40,15 +40,15 @@ bool Write(HANDLE handle, std::wstring_view value)
 }
 }
 
-int DispatchCommandLine(Options* guiOptions)
+int32_t DispatchCommandLine(Options* guiOptions)
 {
-    int argc = 0;
+    int32_t argc = 0;
     auto argv = CommandLineToArgvW(GetCommandLineW(), &argc);
     if(!argv) return 2;
     struct FreeArguments { void operator()(wchar_t** p) const { LocalFree(p); } };
     std::unique_ptr<wchar_t*, FreeArguments> owner(argv);
     std::vector<std::wstring_view> arguments;
-    for(int i = 1; i < argc; ++i) arguments.emplace_back(argv[i]);
+    for(int32_t i = 1; i < argc; ++i) arguments.emplace_back(argv[i]);
     const auto options = Parse(arguments);
     if(options.mode == Mode::Desktop || options.mode == Mode::LockUi) {
         if(guiOptions) *guiOptions = options;

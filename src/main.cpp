@@ -137,6 +137,16 @@ namespace
         SelectObject(hdc, hPenOld);
         DeleteObject(hPenOutline);
     }
+
+    // Custom button config
+    struct ModernButtonConfig
+    {
+        COLORREF bgColorNormal;  // normal bg color
+        COLORREF bgColorHover;   // hover bg color
+        COLORREF bgColorPressed; // click bg color
+        COLORREF textColor;      // text color
+    };
+
     AppSettings g_settings;
     HWND g_hwndToolWindow = nullptr;
 
@@ -161,7 +171,7 @@ namespace
         return nullptr;
     }
 
-    void OpenLockInspector()
+    void OpenLockInspector(HWND hwnd)
     {
         HWND existing = FindOwnLockInspector();
         if(existing) {
@@ -173,8 +183,8 @@ namespace
             return;
         if(g_lockUiThread.joinable())
             g_lockUiThread.join();
-        g_lockUiThread = std::thread([] {
-            const int result = RunLockInspectorGui(GetModuleHandleW(nullptr), SW_SHOWNORMAL, {});
+        g_lockUiThread = std::thread([hwnd] {
+            const int result = RunLockInspectorGui(GetModuleHandleW(nullptr), hwnd, SW_SHOWNORMAL, {});
             g_lockUiRunning.store(false);
             if(result != 0)
                 MessageBoxW(nullptr, L"Unable to open Lock Inspector.", L"wperf", MB_ICONERROR | MB_OK);
@@ -215,7 +225,7 @@ namespace
         if(selection == MenuID_Settings)
             ShowSettingsDialog(hwnd);
         else if(selection == MenuID_LockInspector)
-            OpenLockInspector();
+            OpenLockInspector(hwnd);
         else if(selection == MenuID_MemoryPurge)
             ShowMemoryPurgeDialog(hwnd);
         else if(selection == MenuID_Exit)
@@ -635,7 +645,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     const int cliExitCode = cli::DispatchCommandLine(&startupOptions);
     if(cliExitCode >= 0) return cliExitCode;
     if(startupOptions.mode == cli::Mode::LockUi)
-        return RunLockInspectorGui(hInstance, nCmdShow, startupOptions.path);
+        return RunLockInspectorGui(hInstance, nullptr, nCmdShow, startupOptions.path);
 
     // Enable modern visual styling
     InitCommonControls();
@@ -644,7 +654,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     SetProcessDPIAware();
 
     { // Register Main Window Class
-        WNDCLASSEXW wcx = {0};
+        WNDCLASSEXW wcx = {};
         wcx.cbSize = sizeof(wcx);
         wcx.style = CS_HREDRAW | CS_VREDRAW;
         wcx.lpfnWndProc = MainWndProc;
