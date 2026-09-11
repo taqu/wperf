@@ -1,18 +1,17 @@
 #include "app_logic.h"
-#include "lock_cli.h"
 #include "lock_gui.h"
+#include "purge_memory.h"
 #include "resource.h"
 #include "resource_monitor.h"
 #include <algorithm>
+#include <atomic>
 #include <cassert>
 #include <commctrl.h>
 #include <cstdint>
 #include <dxgi.h>
 #include <shellapi.h>
-#include <atomic>
 #include <thread>
 #include <windows.h>
-#include "purge_memory.h"
 // Main window proc and helpers
 LRESULT CALLBACK MainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 namespace wperf
@@ -137,6 +136,16 @@ namespace
         SelectObject(hdc, hPenOld);
         DeleteObject(hPenOutline);
     }
+
+    // Custom button config
+    struct ModernButtonConfig
+    {
+        COLORREF bgColorNormal;  // normal bg color
+        COLORREF bgColorHover;   // hover bg color
+        COLORREF bgColorPressed; // click bg color
+        COLORREF textColor;      // text color
+    };
+
     AppSettings g_settings;
     HWND g_hwndToolWindow = nullptr;
 
@@ -161,7 +170,7 @@ namespace
         return nullptr;
     }
 
-    void OpenLockInspector()
+    void OpenLockInspector(HWND hwnd)
     {
         HWND existing = FindOwnLockInspector();
         if(existing) {
@@ -173,8 +182,8 @@ namespace
             return;
         if(g_lockUiThread.joinable())
             g_lockUiThread.join();
-        g_lockUiThread = std::thread([] {
-            const int result = RunLockInspectorGui(GetModuleHandleW(nullptr), SW_SHOWNORMAL, {});
+        g_lockUiThread = std::thread([hwnd] {
+            const int result = RunLockInspectorGui(GetModuleHandleW(nullptr), hwnd, SW_SHOWNORMAL, {});
             g_lockUiRunning.store(false);
             if(result != 0)
                 MessageBoxW(nullptr, L"Unable to open Lock Inspector.", L"wperf", MB_ICONERROR | MB_OK);
@@ -215,7 +224,7 @@ namespace
         if(selection == MenuID_Settings)
             ShowSettingsDialog(hwnd);
         else if(selection == MenuID_LockInspector)
-            OpenLockInspector();
+            OpenLockInspector(hwnd);
         else if(selection == MenuID_MemoryPurge)
             ShowMemoryPurgeDialog(hwnd);
         else if(selection == MenuID_Exit)
@@ -418,7 +427,7 @@ LRESULT CALLBACK MemoryPurgeWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
     }
     case WM_TIMER: {
         if(wParam == TimerID_PurgeMemory) {
-            if(g_purgeProcesses.isEnd()){
+            if(g_purgeProcesses.isEnd()) {
                 DestroyWindow(hwnd);
                 return 0;
             }
@@ -541,7 +550,7 @@ void ShowSettingsDialog(HWND hwndParent)
         x, y, dlgW, dlgH,
         hwndParent, nullptr, GetModuleHandleW(nullptr), nullptr);
 
-    if(!g_hwndToolWindow){
+    if(!g_hwndToolWindow) {
         return;
     }
 
@@ -594,7 +603,7 @@ void ShowMemoryPurgeDialog(HWND hwndParent)
         x, y, dlgW, dlgH,
         hwndParent, nullptr, GetModuleHandleW(nullptr), nullptr);
 
-    if(nullptr == g_hwndToolWindow){
+    if(nullptr == g_hwndToolWindow) {
         return;
     }
 
@@ -631,12 +640,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     UNREFERENCED_PARAMETER(hPrevInstance);
     UNREFERENCED_PARAMETER(lpCmdLine);
 
-    cli::Options startupOptions;
-    const int cliExitCode = cli::DispatchCommandLine(&startupOptions);
-    if(cliExitCode >= 0) return cliExitCode;
-    if(startupOptions.mode == cli::Mode::LockUi)
-        return RunLockInspectorGui(hInstance, nCmdShow, startupOptions.path);
-
     // Enable modern visual styling
     InitCommonControls();
 
@@ -644,7 +647,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     SetProcessDPIAware();
 
     { // Register Main Window Class
-        WNDCLASSEXW wcx = {0};
+        WNDCLASSEXW wcx = {};
         wcx.cbSize = sizeof(wcx);
         wcx.style = CS_HREDRAW | CS_VREDRAW;
         wcx.lpfnWndProc = MainWndProc;
@@ -685,7 +688,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         RegisterClassExW(&wcxSettings);
     }
 
-
     // Load last coordinates from wperf.ini
     DWORD length = GetIniFilePath(ResourceMonitor::kBufferWChars, g_monitor.GetTextBuffer());
     LoadSettings(length, g_monitor.GetTextBuffer());
@@ -699,8 +701,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     if(x == (int32_t)CW_USEDEFAULT || y == (int32_t)CW_USEDEFAULT) {
         RECT workArea;
         SystemParametersInfoW(SPI_GETWORKAREA, 0, &workArea, 0);
-        x = workArea.right - width - 20;
-        y = workArea.bottom - height - 20;
+        x = workArea.right - width;
+        y = workArea.bottom - height;
     }
 
     // Create Main Window as a borderless popup window
@@ -808,6 +810,7 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         if(GetWindowPlacement(hwnd, &wp)) {
             // Only save coordinate states if normal (not minimized)
             if(wp.showCmd == SW_SHOWNORMAL || wp.showCmd == SW_SHOW) {
+                GetIniFilePath(ResourceMonitor::kBufferWChars, g_monitor.GetTextBuffer());
                 wchar_t xStr[16], yStr[16];
                 swprintf_s(xStr, L"%ld", wp.rcNormalPosition.left);
                 swprintf_s(yStr, L"%ld", wp.rcNormalPosition.top);
