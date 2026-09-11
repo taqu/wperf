@@ -18,7 +18,7 @@ A lightweight Windows desktop performance overlay. `wperf` sits at the bottom of
 - On-demand working-set memory purge
 - On-demand Lock Inspector with graphical and command-line interfaces, Restart Manager fast scan, and optional native deep scan
 - Explicit per-process Close Normally and confirmed Force Terminate actions in the Lock Inspector GUI
-- Right-click/tray context menu: **Settings**, **Lock Inspector...**, **Purge Memory**, **Exit**
+- Right-click context menu: **Settings**, **Lock Inspector...**, **Purge Memory**, **Exit**
 
 ## Design Goals
 
@@ -99,7 +99,7 @@ If `wperf.exe` is placed in a write-protected directory such as `C:\Program File
 
 ## Lock Inspector
 
-Open the on-demand **Lock Inspector GUI** from the tray menu (or with `wperf.exe --lock-ui [path]`). Select a process to request a normal close or explicitly confirm force termination (which may lose unsaved data). The CLI remains read-only: `wperf.exe --lock "C:\project\output.dll" [--deep] [--json]`. Normal scans use Windows Restart Manager; explicit deep scans add native handle discovery, including directory descendants. Unicode paths are supported, with no background scanning while idle or closed. Protected processes and path aliases limit coverage. See [usage and limitations](docs/lock-inspector.md).
+Open the on-demand **Lock Inspector GUI** from the right-click context menu (or with `wperf.exe --lock-ui [path]`). Select a process to request a normal close or explicitly confirm force termination (which may lose unsaved data). The CLI remains read-only: `wperf.exe --lock "C:\project\output.dll" [--deep] [--json]`. Normal scans use Windows Restart Manager; explicit deep scans add native handle discovery, including directory descendants. Unicode paths are supported, with no background scanning while idle or closed. Protected processes and path aliases limit coverage. See [usage and limitations](docs/lock-inspector.md).
 
 ## Roadmap
 
