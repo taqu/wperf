@@ -1,18 +1,17 @@
 #include "app_logic.h"
-#include "lock_cli.h"
 #include "lock_gui.h"
+#include "purge_memory.h"
 #include "resource.h"
 #include "resource_monitor.h"
 #include <algorithm>
+#include <atomic>
 #include <cassert>
 #include <commctrl.h>
 #include <cstdint>
 #include <dxgi.h>
 #include <shellapi.h>
-#include <atomic>
 #include <thread>
 #include <windows.h>
-#include "purge_memory.h"
 // Main window proc and helpers
 LRESULT CALLBACK MainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 namespace wperf
@@ -428,7 +427,7 @@ LRESULT CALLBACK MemoryPurgeWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
     }
     case WM_TIMER: {
         if(wParam == TimerID_PurgeMemory) {
-            if(g_purgeProcesses.isEnd()){
+            if(g_purgeProcesses.isEnd()) {
                 DestroyWindow(hwnd);
                 return 0;
             }
@@ -551,7 +550,7 @@ void ShowSettingsDialog(HWND hwndParent)
         x, y, dlgW, dlgH,
         hwndParent, nullptr, GetModuleHandleW(nullptr), nullptr);
 
-    if(!g_hwndToolWindow){
+    if(!g_hwndToolWindow) {
         return;
     }
 
@@ -604,7 +603,7 @@ void ShowMemoryPurgeDialog(HWND hwndParent)
         x, y, dlgW, dlgH,
         hwndParent, nullptr, GetModuleHandleW(nullptr), nullptr);
 
-    if(nullptr == g_hwndToolWindow){
+    if(nullptr == g_hwndToolWindow) {
         return;
     }
 
@@ -640,12 +639,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     using namespace wperf;
     UNREFERENCED_PARAMETER(hPrevInstance);
     UNREFERENCED_PARAMETER(lpCmdLine);
-
-    cli::Options startupOptions;
-    const int cliExitCode = cli::DispatchCommandLine(&startupOptions);
-    if(cliExitCode >= 0) return cliExitCode;
-    if(startupOptions.mode == cli::Mode::LockUi)
-        return RunLockInspectorGui(hInstance, nullptr, nCmdShow, startupOptions.path);
 
     // Enable modern visual styling
     InitCommonControls();
@@ -695,7 +688,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         RegisterClassExW(&wcxSettings);
     }
 
-
     // Load last coordinates from wperf.ini
     DWORD length = GetIniFilePath(ResourceMonitor::kBufferWChars, g_monitor.GetTextBuffer());
     LoadSettings(length, g_monitor.GetTextBuffer());
@@ -709,8 +701,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     if(x == (int32_t)CW_USEDEFAULT || y == (int32_t)CW_USEDEFAULT) {
         RECT workArea;
         SystemParametersInfoW(SPI_GETWORKAREA, 0, &workArea, 0);
-        x = workArea.right - width - 20;
-        y = workArea.bottom - height - 20;
+        x = workArea.right - width;
+        y = workArea.bottom - height;
     }
 
     // Create Main Window as a borderless popup window
@@ -818,6 +810,7 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         if(GetWindowPlacement(hwnd, &wp)) {
             // Only save coordinate states if normal (not minimized)
             if(wp.showCmd == SW_SHOWNORMAL || wp.showCmd == SW_SHOW) {
+                GetIniFilePath(ResourceMonitor::kBufferWChars, g_monitor.GetTextBuffer());
                 wchar_t xStr[16], yStr[16];
                 swprintf_s(xStr, L"%ld", wp.rcNormalPosition.left);
                 swprintf_s(yStr, L"%ld", wp.rcNormalPosition.top);

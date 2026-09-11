@@ -38,7 +38,6 @@ set(HEADERS
 set(SOURCES
     ${SOURCE_DIR}/main.cpp
     ${SOURCE_DIR}/lock_gui.cpp
-    ${SOURCE_DIR}/lock_cli_windows.cpp
     ${SOURCE_DIR}/resource_monitor.cpp
     ${SOURCE_DIR}/purge_memory.cpp
 )
@@ -85,7 +84,6 @@ target_compile_options(wperf_process_controller PRIVATE /W4 /WX /permissive- /ut
 
 target_link_libraries(${PROJECT_NAME} PRIVATE
     wperf_lock_inspector
-    wperf_lock_cli
     wperf_lock_gui_presenter
     wperf_process_controller
     shell32
@@ -97,7 +95,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     ole32
 )
 
-target_compile_options(${PROJECT_NAME} PRIVATE /W4 /WX /permissive- /utf-8)
+target_compile_options(${PROJECT_NAME} PRIVATE /W4 /Zc:inline /GR- /permissive- /utf-8)
 target_compile_options(${PROJECT_NAME} PRIVATE $<$<CONFIG:Release>:/O2 /Oi /Gy /GL>)
 target_link_options(${PROJECT_NAME} PRIVATE $<$<CONFIG:Release>:/OPT:REF /OPT:ICF /LTCG>)
 set_target_properties(${PROJECT_NAME} PROPERTIES LINK_FLAGS "/HEAP:0,0 /STACK:0,0")
