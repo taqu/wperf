@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 4.2.0)
 set(PROJECT_NAME wperf)
-project(${PROJECT_NAME} VERSION 0.1.0 LANGUAGES CXX)
+project(${PROJECT_NAME} VERSION 0.3.0 LANGUAGES CXX)
 
 set(WPERF_VERSION_SUFFIX "" CACHE STRING "Optional semantic version prerelease suffix, for example -rc1")
 if(NOT WPERF_VERSION_SUFFIX MATCHES "^(-[0-9A-Za-z.-]+)?$")
