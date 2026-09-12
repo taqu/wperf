@@ -30,6 +30,7 @@ add_compile_definitions(UNICODE _UNICODE WINVER=0x0601 _WIN32_WINNT=0x0601)
 set(HEADERS
     ${HEADER_DIR}/app_logic.h
     ${HEADER_DIR}/lock_gui.h
+    ${HEADER_DIR}/lock_cli.h
     ${HEADER_DIR}/process_controller.h
     ${HEADER_DIR}/resource_monitor.h
     ${HEADER_DIR}/purge_memory.h
@@ -38,6 +39,7 @@ set(HEADERS
 set(SOURCES
     ${SOURCE_DIR}/main.cpp
     ${SOURCE_DIR}/lock_gui.cpp
+    ${SOURCE_DIR}/lock_cli.cpp
     ${SOURCE_DIR}/resource_monitor.cpp
     ${SOURCE_DIR}/purge_memory.cpp
 )
