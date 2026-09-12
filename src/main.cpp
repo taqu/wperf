@@ -1,8 +1,10 @@
 #include "app_logic.h"
 #include "lock_gui.h"
+#include "lock_cli.h"
 #include "purge_memory.h"
 #include "resource.h"
 #include "resource_monitor.h"
+
 #include <algorithm>
 #include <atomic>
 #include <cassert>
@@ -12,6 +14,7 @@
 #include <shellapi.h>
 #include <thread>
 #include <windows.h>
+
 // Main window proc and helpers
 LRESULT CALLBACK MainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 namespace wperf
@@ -639,6 +642,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     using namespace wperf;
     UNREFERENCED_PARAMETER(hPrevInstance);
     UNREFERENCED_PARAMETER(lpCmdLine);
+    cli::Options startupOptions;
+    const int cliExitCode = cli::DispatchCommandLine(&startupOptions);
+    if(cliExitCode >= 0){
+        return cliExitCode;
+    }
 
     // Enable modern visual styling
     InitCommonControls();

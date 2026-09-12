@@ -6,7 +6,7 @@
 
 namespace wperf::cli
 {
-enum class Mode { Desktop, Help, Version, Inspect, LockUi, Invalid };
+enum class Mode { Desktop, Help, Version, Inspect, Invalid };
 struct Options
 {
     Mode mode = Mode::Desktop;

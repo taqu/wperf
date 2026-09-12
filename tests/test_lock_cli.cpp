@@ -36,16 +36,6 @@ TEST_CASE("CLI accepts wide paths and JSON in either order") {
     CHECK(options.path == L"C:\\作業 folder\\file.txt");
     CHECK(Args({L"--json", L"--lock", L"C:\\file"}).mode == Mode::Inspect);
 }
-TEST_CASE("CLI accepts Lock Inspector GUI with an optional path") {
-    auto options = Args({L"--lock-ui"});
-    CHECK(options.mode == Mode::LockUi);
-    CHECK(options.path.empty());
-    options = Args({L"--lock-ui", L"C:\\作業 folder\\file.txt"});
-    CHECK(options.mode == Mode::LockUi);
-    CHECK(options.path == L"C:\\作業 folder\\file.txt");
-    CHECK(Args({L"--lock-ui", L"--deep"}).mode == Mode::Invalid);
-    CHECK(Args({L"--lock-ui", L"C:\\file", L"extra"}).mode == Mode::Invalid);
-}
 TEST_CASE("CLI rejects missing empty unknown duplicate and conflicting arguments") {
     const std::vector<std::vector<std::wstring_view>> cases = {
         {L"--lock"}, {L"--lock", L""}, {L"--json"}, {L"--unknown"},
