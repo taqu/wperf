@@ -10,6 +10,7 @@
 #include <process.h>
 #include <shobjidl.h>
 #include <string>
+#include <vector>
 
 namespace wperf
 {
@@ -48,9 +49,9 @@ namespace
         bool scanning = false;
         bool lastDeep = false;
         bool actionActive = false;
-        int32_t selectedRow = -1;
+        std::vector<int32_t> selectedRows;
         std::vector<ProcessIdentity> identities;
-        std::wstring selectedName;
+        std::vector<std::wstring> names;
         std::wstring actionFeedback;
     };
 
@@ -69,14 +70,21 @@ namespace
     struct ActionRequest
     {
         std::shared_ptr<WindowState> state;
-        ProcessIdentity identity;
+        std::vector<ProcessIdentity> identities;
         bool force = false;
     };
 
     struct ActionCompletion
     {
-        ProcessControlResult result;
+        std::vector<ProcessIdentity> identities;
+        std::vector<ProcessControlResult> results;
         bool force = false;
+    };
+
+    struct ActionTarget
+    {
+        ProcessIdentity identity;
+        std::wstring name;
     };
 
     struct ModernButtonConfig
@@ -281,14 +289,40 @@ namespace
         MoveWindow(GetDlgItem(window, Close), area.right - margin - buttonWidth, bottomY, buttonWidth, controlHeight, TRUE);
     }
 
+    /**
+     * @brief Collect controllable processes from the selected rows, skipping duplicates, invalid identities and self
+     * @param state
+     * @return
+     */
+    std::vector<ActionTarget> CollectActionTargets(const WindowState& state)
+    {
+        std::vector<ActionTarget> targets;
+        for(const int32_t row: state.selectedRows) {
+            if(row < 0 || static_cast<size_t>(row) >= state.identities.size())
+                continue;
+            const auto& identity = state.identities[static_cast<size_t>(row)];
+            if(!identity.valid || identity.pid == GetCurrentProcessId())
+                continue;
+            bool duplicate = false;
+            for(const auto& target: targets) {
+                if(target.identity.pid == identity.pid && target.identity.creationTime == identity.creationTime) {
+                    duplicate = true;
+                    break;
+                }
+            }
+            if(duplicate)
+                continue;
+            targets.push_back({identity, static_cast<size_t>(row) < state.names.size() ? state.names[static_cast<size_t>(row)] : std::wstring()});
+        }
+        return targets;
+    }
+
     void UpdateActionControls(HWND window, WindowState& state)
     {
-        const bool enabled = !state.scanning && !state.actionActive && state.selectedRow >= 0
-                             && static_cast<size_t>(state.selectedRow) < state.identities.size()
-                             && state.identities[static_cast<size_t>(state.selectedRow)].valid
-                             && state.identities[static_cast<size_t>(state.selectedRow)].pid != GetCurrentProcessId();
-        EnableWindow(GetDlgItem(window, CloseNormallyButton), enabled);
-        EnableWindow(GetDlgItem(window, ForceTerminateButton), enabled);
+        const bool idle = !state.scanning && !state.actionActive;
+        const size_t targetCount = idle ? CollectActionTargets(state).size() : 0;
+        EnableWindow(GetDlgItem(window, CloseNormallyButton), targetCount == 1);
+        EnableWindow(GetDlgItem(window, ForceTerminateButton), 0 < targetCount);
     }
 
     std::wstring PickPath(HWND owner, bool folder)
@@ -344,11 +378,15 @@ namespace
         std::unique_ptr<ActionRequest> request(static_cast<ActionRequest*>(parameter));
         auto completion = std::make_unique<ActionCompletion>();
         completion->force = request->force;
-        try {
-            completion->result = request->force ? ForceTerminate(request->identity)
-                                                : RequestGracefulClose(request->identity);
-        } catch(...) {
-            completion->result = {ProcessControlStatus::Failed, ERROR_NOT_ENOUGH_MEMORY, 0};
+        completion->identities = request->identities;
+        completion->results.resize(request->identities.size());
+        for(size_t index = 0; index < request->identities.size(); ++index) {
+            try {
+                completion->results[index] = request->force ? ForceTerminate(request->identities[index])
+                                                            : RequestGracefulClose(request->identities[index]);
+            } catch(...) {
+                completion->results[index] = {ProcessControlStatus::Failed, ERROR_NOT_ENOUGH_MEMORY, 0};
+            }
         }
         request->state->actionCompletion.store(completion.release());
         SetEvent(request->state->actionEvent);
@@ -395,17 +433,49 @@ namespace
         return status;
     }
 
+    std::wstring ActionStatus(const ActionCompletion& completion)
+    {
+        if(completion.results.size() == 1)
+            return ActionStatus(completion.results[0], completion.force);
+        size_t succeeded = 0;
+        size_t firstFailure = completion.results.size();
+        for(size_t index = 0; index < completion.results.size(); ++index) {
+            const auto status = completion.results[index].status;
+            if(status == ProcessControlStatus::ProcessExited || status == ProcessControlStatus::AlreadyExited)
+                ++succeeded;
+            else if(firstFailure == completion.results.size())
+                firstFailure = index;
+        }
+        std::wstring status = (completion.force ? L"Force terminated " : L"Closed ") + std::to_wstring(succeeded)
+                              + L" of " + std::to_wstring(completion.results.size()) + L" processes.";
+        if(firstFailure < completion.results.size()) {
+            status += L" PID " + std::to_wstring(completion.identities[firstFailure].pid) + L": "
+                      + ActionStatus(completion.results[firstFailure], completion.force);
+        }
+        return status;
+    }
+
     void BeginAction(HWND window, WindowState& state, bool force)
     {
-        if(state.scanning || state.actionActive || state.selectedRow < 0
-           || static_cast<size_t>(state.selectedRow) >= state.identities.size())
+        if(state.scanning || state.actionActive)
             return;
-        const auto identity = state.identities[static_cast<size_t>(state.selectedRow)];
-        if(!identity.valid || identity.pid == GetCurrentProcessId())
+        const auto targets = CollectActionTargets(state);
+        // Graceful close targets a single process; force termination accepts multiple selections
+        if(targets.empty() || (!force && targets.size() != 1))
             return;
         if(force) {
-            std::wstring prompt = L"Force terminate " + state.selectedName + L" (PID "
-                                  + std::to_wstring(identity.pid) + L")?\n\nUnsaved data may be lost.";
+            std::wstring prompt;
+            if(targets.size() == 1) {
+                prompt = L"Force terminate " + targets[0].name + L" (PID " + std::to_wstring(targets[0].identity.pid) + L")?";
+            } else {
+                static constexpr size_t MaxListed = 10;
+                prompt = L"Force terminate " + std::to_wstring(targets.size()) + L" processes?\n";
+                for(size_t index = 0; index < targets.size() && index < MaxListed; ++index)
+                    prompt += L"\n" + targets[index].name + L" (PID " + std::to_wstring(targets[index].identity.pid) + L")";
+                if(MaxListed < targets.size())
+                    prompt += L"\n...and " + std::to_wstring(targets.size() - MaxListed) + L" more";
+            }
+            prompt += L"\n\nUnsaved data may be lost.";
             if(MessageBoxW(window, prompt.c_str(), L"Confirm force termination",
                            MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2)
                != IDYES)
@@ -417,7 +487,8 @@ namespace
         SetDlgItemTextW(window, StatusLabel, force ? L"Force termination in progress..." : L"Close request in progress...");
         auto request = std::make_unique<ActionRequest>();
         request->state = *reinterpret_cast<std::shared_ptr<WindowState>*>(GetWindowLongPtrW(window, GWLP_USERDATA));
-        request->identity = identity;
+        for(const auto& target: targets)
+            request->identities.push_back(target.identity);
         request->force = force;
         state.actionEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
         if(!state.actionEvent) {
@@ -489,8 +560,8 @@ namespace
         HWND list = GetDlgItem(window, ResultList);
         ListView_DeleteAllItems(list);
         state.identities.clear();
-        state.selectedRow = -1;
-        state.selectedName.clear();
+        state.names.clear();
+        state.selectedRows.clear();
         for(size_t index = 0; index < view.rows.size(); ++index) {
             const auto& row = view.rows[index];
             LVITEMW item{};
@@ -508,6 +579,7 @@ namespace
             else if(identity.valid && (!captured.valid || identity.creationTime != captured.creationTime))
                 identity.valid = false;
             state.identities.push_back(identity);
+            state.names.push_back(row.process);
         }
         std::wstring status = view.status;
         if(!state.actionFeedback.empty()) {
@@ -637,13 +709,11 @@ namespace
         case WM_NOTIFY:
             if(state && reinterpret_cast<NMHDR*>(lParam)->idFrom == ResultList
                && reinterpret_cast<NMHDR*>(lParam)->code == LVN_ITEMCHANGED) {
-                state->selectedRow = ListView_GetNextItem(GetDlgItem(window, ResultList), -1, LVNI_SELECTED);
-                state->selectedName.clear();
-                if(state->selectedRow >= 0) {
-                    wchar_t name[512]{};
-                    ListView_GetItemText(GetDlgItem(window, ResultList), state->selectedRow, 0, name, 512);
-                    state->selectedName = name;
-                }
+                HWND list = GetDlgItem(window, ResultList);
+                state->selectedRows.clear();
+                for(int32_t row = ListView_GetNextItem(list, -1, LVNI_SELECTED); row >= 0;
+                    row = ListView_GetNextItem(list, row, LVNI_SELECTED))
+                    state->selectedRows.push_back(row);
                 UpdateActionControls(window, *state);
                 return 0;
             }
@@ -819,7 +889,7 @@ int32_t RunLockInspectorGui(HINSTANCE instance, HWND parent, int32_t showCommand
                     state->actionWorker = nullptr;
                 }
                 state->actionActive = false;
-                state->actionFeedback = ActionStatus(completion->result, completion->force);
+                state->actionFeedback = ActionStatus(*completion);
                 if(HWND active = state->window.load()) {
                     EnableScanControls(active, true);
                     BeginScan(active, *state, state->lastDeep);
